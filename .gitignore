@@ -42,3 +42,10 @@ Thumbs.db
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+.vercel
+.env*
+
+# ★ 위쪽 .env* 규칙보다 뒤에 와야 효력이 있다 (gitignore 는 나중 규칙이 이긴다).
+#   Vercel CLI 가 link 할 때 .env* 를 자동 추가하는데, 그게 예외를 덮어쓴다.
+!.env.example
