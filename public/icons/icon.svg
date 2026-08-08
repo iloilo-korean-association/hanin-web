@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="일로일로 한인회">
+  <title>일로일로 한인회</title>
+  <rect width="512" height="512" rx="112" fill="#1b4373"/>
+  <path d="M144 128v256M144 256l128-128M144 256l128 128"
+        stroke="#ffffff" stroke-width="42" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <circle cx="376" cy="256" r="52" fill="#e3a951"/>
+</svg>

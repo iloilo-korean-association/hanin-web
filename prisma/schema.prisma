@@ -1,0 +1,759 @@
+// ============================================================================
+// 일로일로 한인회 — 원장 스키마
+//
+// 정본: 02_노코드MVP/시트스키마/원장_19탭_헤더.md  (20탭 303열)
+//       탭 = 모델, 열 = 필드. 필드명은 영문 camelCase 로 바꾸되
+//       **원래 한글 열 이름을 각 줄 주석에 그대로 남긴다** (시트 데이터 이관 매핑표 역할).
+//
+// 옮기면서 정한 규칙 — 임의로 바꾸지 마라
+//  1) enum 금지. Prisma 는 SQLite 에서 enum 을 지원하지 않는다.
+//     모든 열거값은 String 으로 두고 zod 로 검증한다.
+//     허용값 목록은 src/lib/validators/enums.ts 한 곳에만 있다.
+//     → 나중에 Postgres 로 옮길 때 이 파일에서 고칠 것은 datasource 블록 하나뿐이다.
+//  2) Y/N 열은 Boolean. 의미는 그대로고 타입만 정직해졌다.
+//     ('Y'/'N' 문자열을 남기면 'y' · ' Y ' · '' 세 가지가 전부 다르게 동작하는 사고가 난다)
+//  3) 날짜(yyyy-MM-dd)는 String, 일시는 DateTime.
+//     날짜를 문자열로 두는 이유: Asia/Manila 기준 "그 날" 이 UTC 변환으로 하루 밀리는 사고를
+//     원천 차단하고, 문자열 사전순 = 날짜순이라 범위 질의·정렬이 그대로 맞기 때문이다.
+//     시트 원본도 문자열이었다.
+//  4) 금액은 전부 **정수 페소**. 소수점 없음.
+//     외화는 amount(원화폐 금액) + currency + fxRate(거래시점 스냅샷) + amountPhp(페소환산) 병기.
+//     모든 집계는 amountPhp 로만 한다.
+//  5) 시트에 없던 필드를 추가한 곳은 전부 `[추가]` 주석을 달았다. 이유도 함께 적었다.
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  // PostgreSQL (Neon). SQLite 로컬 프로토타입에서 2026-08-09 전환했다.
+  //
+  // 왜 SQLite 를 버렸나: Vercel 서버리스는 파일 시스템이 읽기 전용이고 /tmp 만 쓸 수 있는데
+  // 그마저도 요청이 끝나면 사라지고 인스턴스끼리 공유되지 않는다.
+  // SQLite 로 올리면 회원이 가입해도 다음 요청에서 사라지고 배포할 때마다 장부가 초기화된다.
+  // https://vercel.com/kb/guide/is-sqlite-supported-in-vercel
+  //
+  // 전환 비용이 거의 없었던 이유: 처음부터 **Prisma enum 을 쓰지 않고 String + zod** 로 만들었다.
+  // 네이티브 타입(@db.*)·Json·Bytes·Decimal·원시SQL 도 0건이라 이 블록 말고는 고칠 것이 없었다.
+  //
+  // url        = 풀링 연결(-pooler 가 붙은 호스트). 서버리스는 커넥션이 폭증하므로 필수.
+  // directUrl  = 직결. 마이그레이션은 풀러를 거치면 안 되므로 별도로 둔다.
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 00_설정 — 시스템 상수 (6열)
+// 스크립트가 여기서 값을 읽는다. 키 이름을 바꾸면 코드가 멈춘다.
+// ─────────────────────────────────────────────────────────────────────────────
+model Setting {
+  key         String   @id // 키 — 코드가 찾는 식별자. 수정 금지
+  value       String // 값 — 여기만 고친다
+  description String   @default("") // 설명
+  group       String   @default("") // 그룹 (회계연도/회비/승인/알림/…)
+  updatedBy   String   @default("SYSTEM") // 최종수정자
+  updatedAt   DateTime @updatedAt // 최종수정시각
+
+  @@index([group])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 01_회원 — 회원 마스터 (23열)
+// ★ 개인정보 테이블. 공개 페이지에 이 테이블의 name 이 나가는 경로가 있으면 안 된다.
+// ─────────────────────────────────────────────────────────────────────────────
+model Member {
+  memberNo         String    @id // 회원번호 (M0001) — 결번 없는 순번
+  name             String // 성명 (한글 실명)
+  nameEn           String    @default("") // 성명_영문 (여권 표기, 선택)
+  birthYear        Int? // 출생연도 — 중복검사 키
+  gender           String    @default("미기재") // 성별 M/F/미기재
+  phone            String    @default("") // 연락처 (+63 또는 010)
+  phoneLast4       String    @default("") // 연락처뒷4 — 중복검사 키. 자동 추출
+  email            String    @default("") // 이메일 — 알림 발송 주소
+  region           String    @default("") // 주소_지역 (Iloilo City / Jaro / Mandurriao …)
+  districtTeam     String    @default("") // 지역반
+  householdRole    String    @default("본인") // 세대구분 본인/배우자/자녀/동거
+  joinedOn         String // 가입일 (yyyy-MM-dd)
+  memberType       String // 회원구분 정회원/준회원/명예/법인
+  status           String // 상태 ACTIVE/INACTIVE/WITHDRAWN/중복확인필요
+  duesGrade        String // 회비등급 — Setting '회비단가.*' 키와 일치해야 함
+  rosterConsent    Boolean   @default(false) // 명부공개동의 (Y/N)
+  notifyConsent    Boolean   @default(true) // 알림수신동의 (Y/N)
+  privacyConsentAt DateTime? // 개인정보동의일시 — 법적 근거 기록
+  linkToken        String    @unique // 링크토큰 (8자리) — 본인 조회용 /me/[token]
+  note             String    @default("") // 비고
+  createdBy        String    @default("SYSTEM") // 등록자
+  createdAt        DateTime  @default(now()) // 등록시각
+  formResponseId   String    @default("") // 폼응답ID — 중복 처리 방지 키
+
+  // 관계
+  officer         Officer? // 12_임원 (임원도 회원이다)
+  duesInvoices    DuesInvoice[] // 06_회비고지
+  donations       Donation[] // 07_기부 (기부자회원번호)
+  eventSignups    EventSignup[] // 10_행사신청
+  conflicts       ConflictOfInterest[] // 13_이해상충 (신고자회원번호)
+  vendors         Vendor[] // 14_업소 (관련회원번호)
+  notifyLogs      NotifyLog[] // 15_알림로그 (수신자회원번호)
+  counterpartyTxs Transaction[]        @relation("TxCounterparty") // 05_거래 상대방회원번호
+  magicLinks      MagicLink[]
+  outboxMails     OutboxMail[]
+
+  @@index([status])
+  @@index([duesGrade])
+  @@index([name])
+  @@index([phoneLast4])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 02_계좌 — 현금·GCash·은행 계좌 마스터 (13열). 잔액 검증의 기준.
+// ─────────────────────────────────────────────────────────────────────────────
+model Account {
+  accountId       String  @id // 계좌ID (AC01)
+  name            String // 계좌명 (총무 현금함, GCash 총무폰 …)
+  kind            String // 종류 CASH/GCASH/MAYA/BANK
+  currency        String  @default("PHP") // 통화 PHP/KRW/USD
+  bankName        String  @default("") // 은행명 (CASH 면 공란)
+  accountNoMasked String  @default("") // 계좌번호_마스킹 — 뒤 4자리만. 전체번호 기재 금지
+  holder          String  @default("") // 명의
+  openingBalance  Int     @default(0) // 개시잔액 (정수 페소) — I6 검증 대상
+  openedOn        String // 개시일 (yyyy-MM-dd) — 이 날짜 이전 거래는 잔액 계산에서 제외
+  status          String  @default("ACTIVE") // 상태 ACTIVE/CLOSED
+  manager         String  @default("") // 관리자 (책임 임원 이메일)
+  isPublic        Boolean @default(true) // 공개여부 (Y/N)
+  note            String  @default("") // 비고
+
+  transactions    Transaction[]
+  cashCounts      CashCount[]
+  donations       Donation[]
+  handovers       Handover[]
+  reconciliations Reconciliation[]
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 03_기금 — 일반회계·지정기부금·적립금 (11열). 지정기부 목적외 사용을 막는 축.
+// ─────────────────────────────────────────────────────────────────────────────
+model Fund {
+  fundId         String  @id // 기금ID (FD01)
+  name           String // 기금명
+  kind           String // 종류 일반/지정/적립 — '지정' 은 목적외 사용 금지
+  purpose        String  @default("") // 목적 (지정기금은 필수)
+  startOn        String // 시작일 (yyyy-MM-dd)
+  endOn          String? // 종료일 — 무기한이면 null
+  targetAmount   Int     @default(0) // 목표금액
+  openingBalance Int     @default(0) // 개시잔액
+  status         String  @default("ACTIVE") // 상태 ACTIVE/CLOSED
+  isPublic       Boolean @default(true) // 공개여부
+  note           String  @default("") // 비고
+
+  transactions Transaction[]
+  donations    Donation[]
+  donationUses DonationUse[]
+  approvals    Approval[]
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 04_과목 — 계정과목 (9열). 공개 파일은 publicName 만 보여준다.
+// ─────────────────────────────────────────────────────────────────────────────
+model Category {
+  code       String  @id // 과목코드 (R100 / E200) — R=수입, E=지출
+  name       String // 과목명 (내부용 정식 명칭)
+  majorType  String // 대분류 수입/지출
+  midType    String  @default("") // 중분류 (회비/기부/행사/사무/구호 …)
+  publicName String // 공개표시명 — 공개회계에 나가는 이름
+  isPublic   Boolean @default(true) // 공개여부 — false 면 공개 집계에서 '기타' 로 묶임
+  isActive   Boolean @default(true) // 사용여부 — false 면 선택지에서 제외
+  sortOrder  Int     @default(0) // 정렬순서
+  note       String  @default("") // 비고
+
+  transactions Transaction[]
+  approvals    Approval[]
+
+  @@index([majorType, sortOrder])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 05_거래 — ★ 심장. 모든 돈의 움직임 (25열 + 파생 3)
+//
+// I1: 행 삭제 금지. VOIDED 처리 + 역분개만 허용한다. DELETE 라우트를 만들지 마라.
+// I2: 영수증번호는 회계연도별 결번 없는 순번. ReceiptSequence 로 트랜잭션 안에서 채번.
+// I3: 증빙(evidenceUrl) 없으면 POSTED 불가 → DRAFT.
+// I4: 현금 임계 초과는 확인자(verifiedBy) ≠ 입력자(enteredBy).
+// I5: 마감된 회계연도(FiscalYear.status='CLOSED')에는 쓰기 금지.
+// ─────────────────────────────────────────────────────────────────────────────
+model Transaction {
+  receiptNo            String    @id // 영수증번호 (IKA-2026-000001)
+  date                 String // 일자 (yyyy-MM-dd)
+  direction            String // 방향 IN/OUT
+  amount               Int // 금액 — 원화폐 기준 정수
+  currency             String    @default("PHP") // 통화 PHP/KRW/USD
+  fxRate               Float     @default(1) // 환율 — PHP 면 1. 거래시점 스냅샷
+  amountPhp            Int // 페소환산 = round(amount × fxRate). ★ 모든 집계의 기준
+  accountId            String // 계좌ID
+  fundId               String // 기금ID
+  categoryCode         String // 과목코드
+  counterpartyType     String // 상대방구분 회원/비회원/업소/법인/공공/익명/내부이체
+  counterpartyMemberNo String? // 상대방회원번호 — ★ 공개 페이지 노출 금지
+  counterpartyName     String    @default("") // 상대방명 — ★ 공개 시 마스킹 정책 적용
+  method               String // 수단 CASH/GCASH/MAYA/BANK/CARD_2C2P/INKIND
+  memo                 String    @default("") // 적요 — 개인 실명 기재 금지
+  externalRef          String    @default("") // 외부참조번호 (GCash Ref No 등) — 대사 매칭 키
+  status               String // 상태 DRAFT/POSTED/VOIDED
+  relatedParty         Boolean   @default(false) // 이해관계자여부 (Y/N)
+  approvalId           String? // 승인ID — 지출은 승인 없이 POSTED 금지
+  enteredBy            String // 입력자 (이메일)
+  enteredAt            DateTime  @default(now()) // 입력시각
+  verifiedBy           String    @default("") // 확인자 — 현금 고액은 입력자와 달라야 함 (I4)
+  verifiedAt           DateTime? // 확인시각
+  evidenceUrl          String    @default("") // 증빙URL — 비면 DRAFT 강제 (I3)
+  voidReason           String    @default("") // 무효사유 — VOIDED 일 때 필수
+
+  // [추가] fiscalYear / seq — 시트에서는 영수증번호 문자열을 파싱해 얻던 값이다.
+  //        결번 검사(I2)와 연도별 집계를 문자열 파싱 없이 인덱스로 하기 위해 컬럼으로 뽑았다.
+  fiscalYear Int // 회계연도 (date 에서 파생. 역년 기준)
+  seq        Int // 회계연도 내 일련번호 (1부터. 결번 없음)
+
+  // [추가] reversalOfReceiptNo — I1 의 "역분개" 를 실제 링크로 남긴다.
+  //        시트에서는 무효사유 텍스트에 번호를 적어 두던 것이라 기계가 검증할 수 없었다.
+  reversalOfReceiptNo String?
+
+  account       Account       @relation(fields: [accountId], references: [accountId])
+  fund          Fund          @relation(fields: [fundId], references: [fundId])
+  category      Category      @relation(fields: [categoryCode], references: [code])
+  counterparty  Member?       @relation("TxCounterparty", fields: [counterpartyMemberNo], references: [memberNo])
+  approval      Approval?     @relation(fields: [approvalId], references: [approvalId])
+  reversalOf    Transaction?  @relation("TxReversal", fields: [reversalOfReceiptNo], references: [receiptNo])
+  reversedBy    Transaction[] @relation("TxReversal")
+  fiscalYearRef FiscalYear    @relation(fields: [fiscalYear], references: [year])
+
+  duesInvoices    DuesInvoice[]    @relation("DuesLastReceipt")
+  donations       Donation[]       @relation("DonationReceipt")
+  donationUses    DonationUse[]    @relation("DonationUseReceipt")
+  eventSignups    EventSignup[]    @relation("EventSignupReceipt")
+  reconciliations Reconciliation[]
+
+  @@unique([fiscalYear, seq])
+  @@index([date])
+  @@index([fiscalYear, status])
+  @@index([status, direction])
+  @@index([accountId, date])
+  @@index([fundId, date])
+  @@index([categoryCode])
+  @@index([relatedParty])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 06_회비고지 — 연회비 고지·수납 대사 (19열). 독촉 3회 제한이 여기서 관리된다.
+// ─────────────────────────────────────────────────────────────────────────────
+model DuesInvoice {
+  invoiceId     String  @id // 고지ID (DU-2026-0001)
+  fiscalYear    Int // 회계연도
+  memberNo      String // 회원번호
+  memberName    String // 성명 (조회 편의용 사본)
+  duesGrade     String // 회비등급
+  billedAmount  Int // 고지금액
+  currency      String  @default("PHP") // 통화
+  billedOn      String // 고지일
+  dueOn         String // 납기일 — 독촉 D+7/30/60 기산점
+  paidAmount    Int     @default(0) // 납부금액 (수납 시 누적)
+  unpaidAmount  Int // 미납금액 = 고지금액 - 납부금액
+  status        String // 상태 미납/부분납/완납/면제
+  lastReceiptNo String? // 최종수납영수증번호
+  lastPaidOn    String? // 최종수납일
+  dunning1On    String? // 독촉1차일 — 값이 있으면 1차 재발송 안 함
+  dunning2On    String? // 독촉2차일
+  dunning3On    String? // 독촉3차일 — 3차까지만
+  exemptReason  String  @default("") // 면제사유
+  note          String  @default("") // 비고
+
+  member      Member       @relation(fields: [memberNo], references: [memberNo])
+  lastReceipt Transaction? @relation("DuesLastReceipt", fields: [lastReceiptNo], references: [receiptNo])
+
+  @@unique([fiscalYear, memberNo])
+  @@index([status])
+  @@index([fiscalYear, status])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 07_기부 — 기부 접수 (21열). 익명·비공개 동의 건은 공개에서 걸러진다.
+// ─────────────────────────────────────────────────────────────────────────────
+model Donation {
+  donationId        String  @id // 기부ID (DN-2026-0001)
+  receivedOn        String // 접수일
+  donorType         String // 기부자구분 회원/비회원/법인/익명
+  donorMemberNo     String? // 기부자회원번호 — ★ 공개 금지
+  donorName         String  @default("") // 기부자명 — ★ 공개 금지
+  donorPhone        String  @default("") // 연락처 — ★ 공개 금지
+  amount            Int // 금액
+  currency          String  @default("PHP") // 통화
+  amountPhp         Int // 페소환산
+  isDesignated      Boolean @default(false) // 지정여부 — true 면 fundId 필수
+  fundId            String? // 지정기금ID
+  designatedPurpose String  @default("") // 지정용도
+  method            String // 수단 CASH/GCASH/MAYA/BANK/INKIND
+  accountId         String? // 계좌ID
+  receiptNo         String? // 영수증번호 — 입금 거래와 연결
+  isAnonymous       Boolean @default(false) // 익명여부
+  publicConsent     Boolean @default(false) // 공개동의 — true 일 때만 공개 목록에 표기
+  publicDisplayName String  @default("") // 공개표기명 (김OO, 아무개 가족 …)
+  thanksSentOn      String? // 감사장발송일
+  status            String  @default("접수") // 상태 접수/확인/취소
+  note              String  @default("") // 비고
+
+  donor   Member?       @relation(fields: [donorMemberNo], references: [memberNo])
+  fund    Fund?         @relation(fields: [fundId], references: [fundId])
+  account Account?      @relation(fields: [accountId], references: [accountId])
+  receipt Transaction?  @relation("DonationReceipt", fields: [receiptNo], references: [receiptNo])
+  uses    DonationUse[]
+
+  @@index([receivedOn])
+  @@index([fundId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 08_기부사용 — 지정기부금이 어디에 쓰였는가 (14열).
+// 접수액 초과 사용은 주간 검사가 잡는다.
+// ─────────────────────────────────────────────────────────────────────────────
+model DonationUse {
+  useId       String   @id // 사용ID (DU-USE-0001)
+  donationId  String? // 기부ID — 일반기금 사용이면 null
+  fundId      String // 기금ID
+  usedOn      String // 사용일
+  amount      Int // 사용금액
+  currency    String   @default("PHP") // 통화
+  amountPhp   Int // 페소환산
+  receiptNo   String? // 연결영수증번호 (실제 지출 거래)
+  purposeText String // 용도설명
+  evidenceUrl String   @default("") // 증빙URL
+  approvalId  String? // 승인ID
+  status      String   @default("집행") // 상태 계획/집행/취소
+  enteredBy   String // 입력자
+  enteredAt   DateTime @default(now()) // 입력시각
+
+  donation Donation?    @relation(fields: [donationId], references: [donationId])
+  fund     Fund         @relation(fields: [fundId], references: [fundId])
+  receipt  Transaction? @relation("DonationUseReceipt", fields: [receiptNo], references: [receiptNo])
+  approval Approval?    @relation(fields: [approvalId], references: [approvalId])
+
+  @@index([fundId, usedOn])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 09_행사 — 행사 마스터 (16열). 행사별 수지 결산 근거.
+// ─────────────────────────────────────────────────────────────────────────────
+model Event {
+  eventId              String   @id // 행사ID (EV-2026-01)
+  title                String // 행사명
+  kind                 String // 유형 정기총회/체육대회/명절/봉사/기타
+  startsAt             DateTime // 시작일시
+  endsAt               DateTime // 종료일시
+  place                String   @default("") // 장소
+  capacity             Int      @default(0) // 정원 — 0 이면 제한 없음
+  fee                  Int      @default(0) // 참가비
+  currency             String   @default("PHP") // 통화
+  budget               Int      @default(0) // 예산
+  ownerEmail           String   @default("") // 담당임원
+  signupDeadline       String? // 신청마감일
+  status               String // 상태 준비/접수중/마감/완료/취소
+  isPublic             Boolean  @default(true) // 공개여부
+  settlementReceiptNos String   @default("") // 결산영수증번호목록 (쉼표 구분)
+  note                 String   @default("") // 비고
+
+  signups EventSignup[]
+
+  @@index([status])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 10_행사신청 — 행사 참가 신청 (15열). ★ 개인정보 포함 — 공개 금지.
+// ─────────────────────────────────────────────────────────────────────────────
+model EventSignup {
+  signupId       String   @id // 신청ID (EA-0001)
+  eventId        String // 행사ID
+  appliedAt      DateTime @default(now()) // 신청일시
+  memberNo       String? // 회원번호
+  applicantName  String // 신청자명 — ★ 공개 금지
+  phone          String   @default("") // 연락처 — ★ 공개 금지
+  guests         Int      @default(0) // 동반인원
+  totalPeople    Int      @default(1) // 총인원 = 본인 + 동반
+  feeTotal       Int      @default(0) // 참가비합계
+  paid           Boolean  @default(false) // 납부여부
+  receiptNo      String? // 납부영수증번호
+  attendance     String   @default("예정") // 참석여부 예정/참석/불참
+  specialNote    String   @default("") // 특이사항 (식이·알러지 등)
+  status         String   @default("접수") // 상태 접수/확정/취소
+  formResponseId String   @default("") // 폼응답ID
+
+  event   Event        @relation(fields: [eventId], references: [eventId])
+  member  Member?      @relation(fields: [memberNo], references: [memberNo])
+  receipt Transaction? @relation("EventSignupReceipt", fields: [receiptNo], references: [receiptNo])
+
+  @@index([eventId, status])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 11_승인 — 지출 사전승인 (25열). 승인 없는 지출은 POSTED 될 수 없다.
+//
+// ★ counterpartyName / vendorId 두 열은 **이해상충 판정 전용**이다.
+//   예전에는 수취인을 reason 텍스트에 묻어놓고 정규식으로 다시 꺼냈는데,
+//   "- 오톤 하드웨어" 처럼 하이픈으로 시작하면 캡처값이 공백 한 칸이 되어
+//   이해관계자 판정이 통째로 건너뛰어졌다. 그래서 전용 열에 구조화해 저장한다.
+//   (근거: 02_노코드MVP/AppsScript/13_웹앱_임원.gs 의 승인상대방열_ 주석)
+// ─────────────────────────────────────────────────────────────────────────────
+model Approval {
+  approvalId        String    @id // 승인ID (AP-2026-0001)
+  requestedAt       DateTime  @default(now()) // 요청일시
+  requestedBy       String // 요청자 (이메일)
+  kind              String // 유형 지출/기금이체/예산변경/무효처리
+  amount            Int // 금액
+  currency          String    @default("PHP") // 통화
+  amountPhp         Int // 페소환산 — 승인한도 판정 기준
+  fundId            String? // 기금ID
+  categoryCode      String? // 과목코드
+  reason            String // 사유
+  relatedParty      Boolean   @default(false) // 이해관계자여부 — true 면 2차 승인 강제
+  conflictId        String? // 이해상충ID
+  quoteUrl          String    @default("") // 견적서URL
+  requiredStages    Int       @default(0) // 필요승인단계 0(전결)/1/2
+  approver1         String    @default("") // 1차승인자
+  approvedAt1       DateTime? // 1차승인일시
+  result1           String    @default("대기") // 1차결과 승인/반려/대기/불필요
+  approver2         String    @default("") // 2차승인자
+  approvedAt2       DateTime? // 2차승인일시
+  result2           String    @default("불필요") // 2차결과 승인/반려/대기/불필요
+  finalStatus       String    @default("대기") // 최종상태 대기/승인/반려/집행완료
+  executedReceiptNo String? // 집행영수증번호 — 관계는 Transaction.approvalId 쪽이 정본
+  note              String    @default("") // 비고
+  counterpartyName  String    @default("") // 상대방명 — 이해상충 판정 전용
+  vendorId          String? // 관련업소ID — 이해상충 판정 전용
+
+  fund         Fund?               @relation(fields: [fundId], references: [fundId])
+  category     Category?           @relation(fields: [categoryCode], references: [code])
+  conflict     ConflictOfInterest? @relation(fields: [conflictId], references: [conflictId])
+  vendor       Vendor?             @relation(fields: [vendorId], references: [vendorId])
+  transactions Transaction[]
+  donationUses DonationUse[]
+
+  @@index([finalStatus])
+  @@index([relatedParty])
+  @@index([requestedAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 12_임원 — 임원 명부·권한·승인한도 (12열).
+// ─────────────────────────────────────────────────────────────────────────────
+model Officer {
+  officerId     String @id // 임원ID (OF01)
+  memberNo      String @unique // 회원번호 — 임원도 회원이다
+  name          String // 성명
+  role          String // 직책 회장/부회장/총무/감사/이사/지역반장
+  termStart     String // 임기시작
+  termEnd       String // 임기종료
+  email         String @unique // 이메일 — 알림 수신 주소
+  phone         String @default("") // 연락처
+  permissions   String @default("조회권") // 권한 — 쉼표 구분 (승인권,조회권,입력권)
+  approvalLimit Int    @default(0) // 승인한도 (페소). 0 이면 승인권 없음
+  status        String @default("ACTIVE") // 상태 ACTIVE/INACTIVE
+  note          String @default("") // 비고
+
+  member     Member             @relation(fields: [memberNo], references: [memberNo])
+  credential OfficerCredential?
+  magicLinks MagicLink[]
+
+  @@index([status])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 13_이해상충 — 임원과 거래상대방의 관계 신고 (16열 + 지분율 1)
+// ─────────────────────────────────────────────────────────────────────────────
+model ConflictOfInterest {
+  conflictId       String  @id // 이해상충ID (CI-0001)
+  declaredOn       String // 신고일
+  declarerMemberNo String // 신고자회원번호
+  declarerName     String // 신고자명
+  role             String  @default("") // 직책
+  counterpartyType String // 상대방구분 업소/법인/개인
+  counterpartyName String // 상대방명
+  relationType     String // 관계유형 본인/가족/사업파트너/지분보유/기타
+  vendorId         String? // 관련업소ID
+  detail           String  @default("") // 내용
+  recused          Boolean @default(false) // 회피여부 — 해당 안건 의결에서 빠졌는가
+  resolution       String  @default("") // 처리결과
+  disclosed        Boolean @default(true) // 공시여부
+  reviewer         String  @default("") // 검토자
+  reviewedOn       String? // 검토일
+  note             String  @default("") // 비고
+
+  // [추가] ownershipPct — 원장 20탭에 지분율 열이 없어서 Apps Script 는
+  //        detail 텍스트에서 정규식으로 "40%" 를 긁어내고 있었다
+  //        (11_웹앱_공개.gs 지분율추출_ 의 [확인 필요] 주석).
+  //        "이해관계 배지 + 지분율 상시 노출" 이 요구사항이므로 정식 컬럼으로 승격한다.
+  //        0~100 정수 퍼센트. 모르면 null (지어내지 않는다).
+  ownershipPct Int?
+
+  declarer  Member     @relation(fields: [declarerMemberNo], references: [memberNo])
+  vendor    Vendor?    @relation(fields: [vendorId], references: [vendorId])
+  approvals Approval[]
+
+  @@index([disclosed])
+  @@index([vendorId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 14_업소 — 거래처(한인 업소 포함) 마스터 (12열 + 지분율 1). 이해관계 표시가 핵심.
+// ─────────────────────────────────────────────────────────────────────────────
+model Vendor {
+  vendorId        String  @id // 업소ID (VD001)
+  name            String // 업소명
+  ownerName       String  @default("") // 대표자명 — 공개.업소_대표자명공개=N 이면 화면에 안 나감
+  industry        String  @default("") // 업종
+  phone           String  @default("") // 연락처
+  address         String  @default("") // 주소
+  tin             String  @default("") // TIN (필리핀 납세자번호) — ★ 어떤 설정으로도 공개 금지
+  relatedMemberNo String? // 관련회원번호 — 임원·회원이 운영하는 업소면 기재
+  relatedParty    Boolean @default(false) // 이해관계여부
+  since           String? // 거래시작일
+  status          String  @default("ACTIVE") // 상태 ACTIVE/INACTIVE
+  note            String  @default("") // 비고
+
+  // [추가] ownershipPct — 업소 디렉터리 배지에 지분율을 상시 노출하기 위한 정식 컬럼.
+  ownershipPct Int?
+
+  // [추가] aliases — 같은 업소의 다른 표기. `|` 로 구분한다.
+  //
+  // 왜 필요한가: 이해상충 판정이 이름 대조로 이루어지는데, 한글 난독화(제로폭공백·자모분해·전각부호)는
+  // conflictNormalize 가 전부 잡지만 **문자 체계가 다르면 못 잡는다.**
+  // 수취인을 "OTON Hardware" 로 적으면 "오톤 하드웨어"(회장 지분 70%)와 대조되지 않아
+  // 회장이 자기 업체 지출을 단독 승인하고 공개 장부에 배지 없이 올라간다 — 실제로 재현됐다.
+  // 필리핀 현지는 간판이 로마자인 업소가 오히려 자연스러워서 악의 없이도 발생한다.
+  //
+  // 예: "OTON Hardware|Oton Hardware|오톤철물"
+  aliases String @default("")
+
+  relatedMember Member?              @relation(fields: [relatedMemberNo], references: [memberNo])
+  conflicts     ConflictOfInterest[]
+  approvals     Approval[]
+
+  @@index([relatedParty])
+  @@index([status])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 15_알림로그 — 모든 메일 발송 기록 (12열).
+// 이 프로토타입은 실제 메일을 보내지 않는다. 발송 대신 OutboxMail 에 적고 /dev/outbox 에서 본다.
+// ─────────────────────────────────────────────────────────────────────────────
+model NotifyLog {
+  logId        String   @id // 로그ID (LG-000001)
+  sentAt       DateTime @default(now()) // 발송일시
+  kind         String // 유형 환영/영수증/독촉1/독촉2/독촉3/감사장/월결산/경고/무결성/매직링크
+  channel      String   @default("EMAIL") // 채널
+  memberNo     String? // 수신자회원번호
+  toMasked     String // 수신주소_마스킹 (ab***@gmail.com)
+  subject      String // 제목
+  relatedId    String   @default("") // 관련ID (고지ID·영수증번호 등)
+  result       String   @default("SUCCESS") // 결과 SUCCESS/FAIL/SKIP/DEFERRED
+  errorMessage String   @default("") // 오류메시지
+  retryCount   Int      @default(0) // 재시도횟수
+  trigger      String   @default("") // 트리거 (실행한 함수명)
+
+  member Member?     @relation(fields: [memberNo], references: [memberNo])
+  outbox OutboxMail?
+
+  @@index([sentAt])
+  @@index([kind])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 16_감사로그 — 누가 무엇을 언제 바꿨는가 (12열). ★ append-only. UPDATE·DELETE 금지.
+// ─────────────────────────────────────────────────────────────────────────────
+model AuditLog {
+  logId       String   @id // 로그ID (AU-000001)
+  occurredAt  DateTime @default(now()) // 발생시각
+  actor       String // 사용자 (이메일)
+  tableName   String // 시트명 → DB 테이블명
+  recordKey   String   @default("") // 행번호 → DB 레코드 키 (영수증번호·회원번호 …)
+  fieldName   String   @default("") // 열이름
+  beforeValue String   @default("") // 이전값
+  afterValue  String   @default("") // 이후값
+  changeType  String // 변경유형 EDIT/INSERT/DELETE_ATTEMPT/SCRIPT/OTHER
+  severity    String   @default("INFO") // 심각도 INFO/WARN/CRITICAL
+  relatedKey  String   @default("") // 관련키
+  note        String   @default("") // 비고
+
+  @@index([occurredAt])
+  @@index([tableName, recordKey])
+  @@index([severity])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 17_현금실사 — 현금·GCash 실물 확인 기록 (13열).
+// ─────────────────────────────────────────────────────────────────────────────
+model CashCount {
+  countId        String   @id // 실사ID (CC-2026-01)
+  countedAt      DateTime // 실사일시
+  accountId      String // 계좌ID
+  bookBalance    Int // 장부잔액 (실사 시점 계산값)
+  countedBalance Int // 실사잔액 (실제로 센 금액)
+  diff           Int // 차액 = 실사잔액 - 장부잔액
+  diffReason     String   @default("") // 차액사유 — 0 이 아니면 필수
+  counter1       String // 실사자1
+  counter2       String // 실사자2 — 실사자1과 달라야 함
+  photoUrl       String   @default("") // 사진URL
+  status         String   @default("정상") // 상태 정상/차액발생/조사중/종결
+  followUp       String   @default("") // 후속조치
+  createdAt      DateTime @default(now()) // 등록시각
+
+  account Account @relation(fields: [accountId], references: [accountId])
+
+  @@index([countedAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 18_인수인계 — 임원 교체·연도 마감 시 잔액과 자료를 넘긴 기록 (15열).
+// I6(개시잔액 = 전기 마감잔액)의 서면 증거다.
+// ─────────────────────────────────────────────────────────────────────────────
+model Handover {
+  handoverId    String  @id // 인계ID (HO-2026-01)
+  date          String // 일자
+  kind          String // 구분 임원교체/연도마감
+  fromEmail     String // 인계자
+  toEmail       String // 인수자
+  role          String  @default("") // 직책
+  items         String  @default("") // 대상항목 (현금함/GCash/통장/도장/장부 …)
+  balanceBefore Int     @default(0) // 인계전잔액
+  balanceAfter  Int     @default(0) // 인계후잔액 — 인계전잔액과 같아야 정상
+  accountId     String? // 계좌ID
+  signatureUrl  String  @default("") // 서명URL
+  attachmentUrl String  @default("") // 첨부URL
+  verifier      String  @default("") // 확인자 (감사)
+  status        String  @default("완료") // 상태 진행/완료/이의
+  note          String  @default("") // 비고
+
+  account Account? @relation(fields: [accountId], references: [accountId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 99_대사_GCash — GCash·은행 명세를 붙여넣고 장부와 대조하는 작업 테이블 (14열).
+// ─────────────────────────────────────────────────────────────────────────────
+model Reconciliation {
+  reconId           String    @id // 대사ID (RC-202601-001)
+  reconDate         String // 대사일자
+  accountId         String // 계좌ID
+  externalAt        DateTime // 외부거래일시 (명세서상 일시)
+  externalRef       String    @default("") // 외부참조번호 (GCash Ref No)
+  externalAmount    Int // 외부금액
+  externalDirection String // 외부방향 IN/OUT
+  externalMemo      String    @default("") // 외부적요
+  matchedReceiptNo  String? // 매칭영수증번호
+  matchStatus       String // 매칭상태 MATCHED/UNMATCHED_EXT/UNMATCHED_BOOK/PARTIAL
+  diff              Int       @default(0) // 차액
+  handledBy         String    @default("") // 처리자
+  handledAt         DateTime? // 처리시각
+  note              String    @default("") // 비고
+
+  account Account      @relation(fields: [accountId], references: [accountId])
+  matched Transaction? @relation(fields: [matchedReceiptNo], references: [receiptNo])
+
+  @@index([accountId, reconDate])
+  @@index([matchStatus])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 여기부터는 원장 20탭에 없던 모델이다. 시트에서는 표현할 수 없었던 것들.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ─────────────────────────────────────────────────────────────────────────────
+// [추가] 회계연도 — I5(마감 연도 불변) · I6(개시잔액 = 전기 마감잔액) 를 1급 객체로.
+// 시트에서는 00_설정의 '마감회계연도목록' 문자열 하나였다. 문자열로는 검증할 수 없다.
+// ─────────────────────────────────────────────────────────────────────────────
+model FiscalYear {
+  year            Int     @id // 회계연도 (2026)
+  startDate       String // 개시일 (yyyy-MM-dd)
+  endDate         String // 종료일
+  status          String // OPEN / CLOSED
+  closedOn        String? // 마감일
+  closedBy        String? // 마감 처리자
+  closingTotalPhp Int? // 마감 시점 전 계좌 합계 잔액 — 다음 해 개시잔액 합계와 같아야 한다 (I6)
+  note            String  @default("")
+
+  transactions    Transaction[]
+  receiptSequence ReceiptSequence?
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// [추가] 영수증 채번 카운터 — I2(결번 없음).
+// 시트에서는 "기존 최대값 + 1" 을 스캔했다. 동시 요청 두 개가 같은 번호를 받을 수 있었고
+// (락으로 막았지만) 스캔 비용도 행 수에 비례했다.
+// 여기서는 DB 트랜잭션 안에서 이 행을 증가시킨다 —
+// 롤백되면 번호도 함께 되돌아가므로 "번호만 소비되고 거래는 없는" 결번이 생기지 않는다.
+// ─────────────────────────────────────────────────────────────────────────────
+model ReceiptSequence {
+  fiscalYear Int      @id // 회계연도
+  lastSeq    Int      @default(0) // 마지막으로 발급한 일련번호
+  updatedAt  DateTime @updatedAt
+
+  fiscalYearRef FiscalYear @relation(fields: [fiscalYear], references: [year])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// [추가] 발송함(Outbox) — 이 프로토타입은 **실제 메일을 보내지 않는다.**
+// 외부 메일 프로바이더에 가입하지 않기 때문이다(계정 0개 원칙).
+// 보낼 메일을 여기에 적고 /dev/outbox 에서 제목·수신자·본문 HTML 을 눈으로 확인한다.
+// 매직링크도 실제 발송 대신 이 화면의 링크를 눌러 들어간다.
+// ─────────────────────────────────────────────────────────────────────────────
+model OutboxMail {
+  id          String    @id @default(cuid())
+  createdAt   DateTime  @default(now())
+  kind        String // NotifyLog.kind 와 같은 분류
+  toEmail     String // 실제 수신 주소 (개발 화면에서만 보인다)
+  toName      String    @default("")
+  subject     String
+  bodyHtml    String // ★ 렌더 시 dangerouslySetInnerHTML 금지.
+  //   /dev/outbox 는 iframe srcdoc 또는 <pre> 로 보여준다.
+  linkPath    String    @default("") // 본문에 들어간 앱 내부 경로 (/me/XXXX 등). 클릭 편의용
+  memberNo    String?
+  notifyLogId String?   @unique
+  readAt      DateTime?
+
+  member    Member?    @relation(fields: [memberNo], references: [memberNo])
+  notifyLog NotifyLog? @relation(fields: [notifyLogId], references: [logId])
+
+  @@index([createdAt])
+  @@index([kind])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// [추가] 매직링크 — 60대 회원이 비밀번호를 만들고 기억하게 하지 않기 위한 인증.
+// pialms 의 무비밀번호 학생 로그인과 같은 발상.
+// 실제 발송 대신 OutboxMail 에 링크가 찍힌다.
+// ─────────────────────────────────────────────────────────────────────────────
+model MagicLink {
+  token     String    @id // URL 에 들어가는 난수 토큰
+  purpose   String // OFFICER_LOGIN / MEMBER_LINK
+  email     String
+  memberNo  String?
+  officerId String?
+  linkPath  String // 이 토큰으로 들어갈 경로 (/auth/magic/<token> 등)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  member  Member?  @relation(fields: [memberNo], references: [memberNo])
+  officer Officer? @relation(fields: [officerId], references: [officerId])
+
+  @@index([email])
+  @@index([expiresAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// [추가] 임원 비밀번호 — 매직링크가 기본이지만, 총무처럼 매일 쓰는 사람은
+// 비밀번호 로그인이 더 빠르다. bcrypt 해시만 둔다. Officer 12열은 건드리지 않았다.
+// ─────────────────────────────────────────────────────────────────────────────
+model OfficerCredential {
+  officerId    String   @id
+  passwordHash String
+  updatedAt    DateTime @updatedAt
+
+  officer Officer @relation(fields: [officerId], references: [officerId])
+}

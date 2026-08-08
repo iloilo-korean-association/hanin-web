@@ -1,0 +1,44 @@
+{
+  "name": "iloilo-korean-association",
+  "version": "0.1.0",
+  "private": true,
+  "description": "일로일로 한인회 홈페이지 · 공개회계 · 임원 업무 (로컬 프로토타입)",
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "prisma generate && next build",
+    "build:next": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "db:push": "prisma db push",
+    "db:generate": "prisma generate",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:reset": "prisma db push --force-reset --skip-generate && prisma generate && tsx prisma/seed.ts",
+    "db:studio": "prisma studio"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.3",
+    "bcryptjs": "^3.0.3",
+    "jose": "^6.2.3",
+    "next": "16.2.7",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "server-only": "^0.0.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.18",
+    "@types/node": "^24.13.2",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.4",
+    "prisma": "^6.19.3",
+    "tailwindcss": "^4.1.18",
+    "tsx": "^4.22.4",
+    "typescript": "^5.9.3"
+  }
+}
