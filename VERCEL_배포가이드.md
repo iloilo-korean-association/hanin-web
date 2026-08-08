@@ -215,7 +215,7 @@ npx tsx prisma/seed.ts
 - [ ] `https://<도메인>/officer` → 로그인 요구
 - [ ] `robots.txt` 가 공개 경로 `Allow`, `/me`·`/officer`·`/dev` `Disallow`
 - [ ] **카톡방에 도메인을 붙여서 썸네일 카드가 뜨는지** ← 이게 목표였습니다
-- [ ] 임원 계정 비밀번호를 **`ika-2026` 에서 반드시 변경**
+- [ ] 임원 계정 비밀번호를 **반드시 변경** (시드 시 SEED_PASSWORD 로 지정하거나, 출력된 무작위 값 사용)
 - [ ] Google Search Console에 sitemap 제출 → 색인 확인
 
 ---

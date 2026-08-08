@@ -61,7 +61,7 @@ export default async function OfficerLoginPage() {
             />
             <CardBody>
               <p className="mb-3">
-                시드된 임원 5명의 공통 비밀번호는 <code className="font-mono font-bold">ika-2026</code> 입니다.
+                시드된 임원 5명의 비밀번호는 <code className="font-mono font-bold">npm run db:reset</code> 실행 시 콘솔에 한 번 출력됩니다. 고정하려면 <code className="font-mono">SEED_PASSWORD</code> 환경변수를 주십시오.
               </p>
               <ul className="mb-4 flex flex-col gap-1 text-sm text-ink-soft">
                 <li>president@ika-iloilo.org — 박정우 회장 (승인권·조회권 / 한도 ₱30,000)</li>

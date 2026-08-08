@@ -18,6 +18,8 @@
  *
  * 실행: npm run db:seed  (또는 npm run db:reset)
  */
+import { randomBytes } from "node:crypto";
+
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
@@ -582,8 +584,17 @@ async function main(): Promise<void> {
     })),
   });
 
-  // 로컬 프로토타입 공통 비밀번호. 실제 배포 전에 반드시 바꾼다.
-  const DEV_PASSWORD = "ika-2026";
+  // 임원 공통 비밀번호.
+  //
+  // ★ 소스에 평문으로 박아두지 않는다. 이 저장소가 공개로 전환될 수 있고,
+  //   비공개라 해도 소스에 있는 비밀번호는 지워지지 않는 히스토리에 영원히 남는다.
+  //   운영 DB를 시드할 때는 반드시 SEED_PASSWORD 를 지정한다:
+  //       $env:SEED_PASSWORD="..." ; npx tsx prisma/seed.ts
+  //   지정하지 않으면 매번 다른 랜덤 값을 만들고 콘솔에 한 번만 찍는다.
+  //   (기본값을 고정 문자열로 두면 아무도 안 바꾼 채 배포된다 — 그게 가장 흔한 사고다)
+  const DEV_PASSWORD =
+    process.env.SEED_PASSWORD?.trim() || randomBytes(9).toString("base64url");
+  const PASSWORD_IS_RANDOM = !process.env.SEED_PASSWORD?.trim();
   const hash = await bcrypt.hash(DEV_PASSWORD, 10);
   await prisma.officerCredential.createMany({
     data: officers.map((o) => ({ officerId: o.officerId, passwordHash: hash })),
@@ -1758,7 +1769,14 @@ async function main(): Promise<void> {
   console.log(`  이해관계자 거래 ${ledger.metrics.relatedPartyCount}건 ${formatPeso(ledger.metrics.relatedPartyAmount)}`);
   console.log(`  ${ledger.metrics.gaps.message}`);
   console.log("");
-  console.log(`  임원 로그인 비밀번호(프로토타입): ${DEV_PASSWORD}  ·  매직링크는 /dev/outbox 에서 클릭`);
+  console.log(
+    `  임원 로그인 비밀번호: ${DEV_PASSWORD}` +
+      (PASSWORD_IS_RANDOM
+        ? "   ← ★ 무작위 생성. 이 줄이 유일한 출력이니 지금 적어두십시오.\n" +
+          "     (고정하려면 SEED_PASSWORD 환경변수를 주고 다시 실행)"
+        : "   (SEED_PASSWORD 로 지정한 값)"),
+  );
+  console.log("  매직링크는 /dev/outbox 에서 클릭");
   console.log("");
 
   const allOk = audit.ok && opening.ok && leaked.length === 0 && missed.length === 0 && !cleanVerdict.related && undet.undetermined;
