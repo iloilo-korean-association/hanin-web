@@ -759,6 +759,32 @@ model OfficerCredential {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// [추가] 한인회 서비스 — 한인회가 회원·교민에게 제공하는 서비스 안내.
+// 공개 페이지(/services)와 임원 관리 탭(/officer/services)의 원본이다.
+//
+// 규칙은 다른 모델과 같다 — enum 금지(String + zod, validators/enums.ts 가 정본),
+// 금액은 정수 페소, 삭제 대신 isPublic=false 또는 status='중단'.
+// 공개 페이지에는 isPublic && status='운영중' 인 행만 나간다.
+// ─────────────────────────────────────────────────────────────────────────────
+model Service {
+  serviceId    String  @id // 서비스ID (SV01) — 결번 걱정 없는 단순 순번
+  title        String // 서비스명
+  category     String // 분류 행정지원/생활정착/긴급지원/교육문화/기타
+  description  String  @default("") // 설명 — 공개 화면에 그대로 나간다
+  howToApply   String  @default("") // 신청 방법
+  contactName  String  @default("") // 담당 창구 — 직책 위주로 적는다(개인 실명 지양)
+  contactPhone String  @default("") // 연락처 — 모르면 비워 둔다(번호를 지어내지 않는다)
+  fee          Int     @default(0) // 이용료 (정수 페소. 0 = 무료)
+  status       String  @default("준비") // 상태 운영중/준비/중단
+  isPublic     Boolean @default(true) // 공개여부 — false 면 공개 페이지에서 제외
+  sortOrder    Int     @default(0) // 정렬순서 (같은 분류 안에서 작은 수가 먼저)
+  note         String  @default("") // 비고
+
+  @@index([status])
+  @@index([category, sortOrder])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 긴급 연락처 — 코드 파일(_data/emergency.ts)에서 DB 로 옮긴 것
 //
 // 왜 옮겼나: 전화번호 하나 고치려고 개발자를 불러 재배포해야 했다.

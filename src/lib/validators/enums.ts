@@ -117,6 +117,18 @@ export const zAttendance = z.enum(ATTENDANCES);
 
 export const SIGNUP_STATUSES = ["접수", "확정", "취소"] as const;
 export const zSignupStatus = z.enum(SIGNUP_STATUSES);
+export type SignupStatus = (typeof SIGNUP_STATUSES)[number];
+
+/* ── [추가] 한인회 서비스 ──────────────────────────────────────────────── */
+
+export const SERVICE_CATEGORIES = ["행정지원", "생활정착", "긴급지원", "교육문화", "기타"] as const;
+export const zServiceCategory = z.enum(SERVICE_CATEGORIES);
+export type ServiceCategory = (typeof SERVICE_CATEGORIES)[number];
+
+/** 공개 페이지(/services)에는 isPublic && '운영중' 만 나간다. */
+export const SERVICE_STATUSES = ["운영중", "준비", "중단"] as const;
+export const zServiceStatus = z.enum(SERVICE_STATUSES);
+export type ServiceStatus = (typeof SERVICE_STATUSES)[number];
 
 /* ── 11_승인 ───────────────────────────────────────────────────────────── */
 
@@ -158,6 +170,7 @@ export const PERMISSIONS = [
   // ── 자료 관리 ────────────────────────────────────────
   "업소관리", // 14_업소 등록·수정·비활성. 이해관계 여부와 지분율을 여기서 정한다
   "행사관리", // 09_행사 등록·수정·마감
+  "서비스관리", // 한인회 서비스 안내 등록·수정. 공개 페이지(/services)에 그대로 나간다
   "연락처관리", // 긴급 연락처 등록·수정. 사람 목숨이 걸린 자료다
   /**
    * ★ 메타 권한 — 다른 임원의 권한을 주고 뺏는다.
@@ -174,7 +187,7 @@ export type Permission = (typeof PERMISSIONS)[number];
 /** 돈을 움직이는 권한. 화면 분류·설명에 쓴다. */
 export const MONEY_PERMISSIONS = ["승인권", "조회권", "입력권"] as const;
 /** 자료를 관리하는 권한. 관리자가 임원에게 위임할 수 있는 것들이다. */
-export const ADMIN_PERMISSIONS = ["업소관리", "행사관리", "연락처관리", "임원관리"] as const;
+export const ADMIN_PERMISSIONS = ["업소관리", "행사관리", "서비스관리", "연락처관리", "임원관리"] as const;
 
 /** 권한별 한 줄 설명. 위임 화면에서 그대로 보여준다. */
 export const PERMISSION_HELP: Record<Permission, string> = {
@@ -183,6 +196,7 @@ export const PERMISSION_HELP: Record<Permission, string> = {
   입력권: "수납을 기록하고 지출을 요청합니다.",
   업소관리: "업소 안내를 등록·수정합니다. 이해관계 여부와 지분율도 여기서 정합니다.",
   행사관리: "행사를 등록·수정하고 신청을 마감합니다.",
+  서비스관리: "한인회 서비스 안내를 등록·수정합니다. 공개 페이지(/services)에 그대로 나갑니다.",
   연락처관리: "긴급 연락처를 등록·수정합니다. 출처와 검증등급을 반드시 남겨야 합니다.",
   임원관리: "다른 임원의 권한과 승인한도를 바꿉니다. 본인 것은 못 바꿉니다.",
 };

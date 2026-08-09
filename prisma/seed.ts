@@ -435,6 +435,7 @@ async function main(): Promise<void> {
   await prisma.officerCredential.deleteMany();
   await prisma.officer.deleteMany();
   await prisma.member.deleteMany();
+  await prisma.service.deleteMany();
   await prisma.category.deleteMany();
   await prisma.fund.deleteMany();
   await prisma.account.deleteMany();
@@ -560,9 +561,10 @@ async function main(): Promise<void> {
 
   /* ── 3-5. 임원 5 ─────────────────────────────────────────────────── */
   const officers = [
-    { officerId: "OF01", memberNo: "M0001", role: "회장", email: EMAIL.president, permissions: "승인권,조회권", approvalLimit: 30_000, note: "이해상충 7건 신고 — 관련 안건 회피(recusal)" },
+    // 서비스관리: 공개 서비스 안내(/services)의 편집 권한. 회장·총무에게 준다.
+    { officerId: "OF01", memberNo: "M0001", role: "회장", email: EMAIL.president, permissions: "승인권,조회권,서비스관리", approvalLimit: 30_000, note: "이해상충 7건 신고 — 관련 안건 회피(recusal)" },
     { officerId: "OF02", memberNo: "M0002", role: "부회장", email: EMAIL.vp, permissions: "승인권,조회권", approvalLimit: 10_000, note: "회장 회피 시 1차 승인 대행" },
-    { officerId: "OF03", memberNo: "M0003", role: "총무", email: EMAIL.treasurer, permissions: "입력권,조회권", approvalLimit: 3_000, note: "이해상충 1건 신고 (배우자 케이터링)" },
+    { officerId: "OF03", memberNo: "M0003", role: "총무", email: EMAIL.treasurer, permissions: "입력권,조회권,서비스관리", approvalLimit: 3_000, note: "이해상충 1건 신고 (배우자 케이터링)" },
     { officerId: "OF04", memberNo: "M0004", role: "감사", email: EMAIL.auditor1, permissions: "조회권", approvalLimit: 0, note: "감사는 입력·승인권 없음" },
     { officerId: "OF05", memberNo: "M0005", role: "감사", email: EMAIL.auditor2, permissions: "승인권,조회권", approvalLimit: 50_000, note: "이사회 2차 승인 담당 감사" },
   ];
@@ -628,6 +630,56 @@ async function main(): Promise<void> {
         note: "",
       };
     }),
+  });
+
+  /* ── 3-6b. 한인회 서비스 ─────────────────────────────────────────── */
+  // 공개 페이지(/services)에는 isPublic && '운영중' 만 나간다 (SV05 준비 · SV06 중단은 안 보인다).
+  // ★ 연락처는 지어내지 않는다 — 확인된 번호가 없으므로 비워 두고 담당 창구(직책)만 적는다.
+  await prisma.service.createMany({
+    data: [
+      {
+        serviceId: "SV01", title: "신규 이주자 온보딩 안내", category: "생활정착",
+        description: "일로일로 정착 초기에 필요한 것들(비자·주거·병원·학교·은행)을 먼저 온 교민이 1:1로 안내해 드립니다.",
+        howToApply: "문의 페이지(/help)로 접수하시거나 총무에게 이메일로 신청해 주십시오.",
+        contactName: "총무", contactPhone: "", fee: 0, status: "운영중", isPublic: true, sortOrder: 10,
+        note: "시드 예시",
+      },
+      {
+        serviceId: "SV02", title: "24시간 긴급 연락 지원", category: "긴급지원",
+        description: "사고·입원·사망 등 긴급 상황에서 공관·병원·경찰 연락을 돕습니다. 생명이 위급하면 먼저 911에 신고하십시오.",
+        howToApply: "긴급 연락처 페이지(/sos)의 절차를 따라 주십시오.",
+        contactName: "당번 임원", contactPhone: "", fee: 0, status: "운영중", isPublic: true, sortOrder: 10,
+        note: "시드 예시 · 핫라인 번호 [확인 필요] — 확정 전까지 화면에는 번호가 나가지 않는다",
+      },
+      {
+        serviceId: "SV03", title: "서류·공증 안내", category: "행정지원",
+        description: "위임장·거주증명 등 서류 작성 요령과 공증 절차를 안내해 드립니다. 법률 자문이 아닙니다 — 변호사 선임은 본인 선택이며, 임원 관련 업체는 업소 안내에 이해관계 배지로 표시됩니다.",
+        howToApply: "문의 페이지(/help)로 접수해 주십시오.",
+        contactName: "총무", contactPhone: "", fee: 0, status: "운영중", isPublic: true, sortOrder: 10,
+        note: "시드 예시",
+      },
+      {
+        serviceId: "SV04", title: "통번역 지원 연결", category: "생활정착",
+        description: "병원·관공서 방문 시 한–영 통역 자원봉사자를 연결해 드립니다.",
+        howToApply: "방문일 최소 3일 전에 문의 페이지(/help)로 신청해 주십시오.",
+        contactName: "총무", contactPhone: "", fee: 0, status: "운영중", isPublic: true, sortOrder: 20,
+        note: "시드 예시",
+      },
+      {
+        serviceId: "SV05", title: "한글학교·문화교실 안내", category: "교육문화",
+        description: "자녀 한글교육과 전통문화 프로그램을 준비하고 있습니다.",
+        howToApply: "개설이 확정되면 홈 공지와 이 페이지에 올립니다.",
+        contactName: "총무", contactPhone: "", fee: 0, status: "준비", isPublic: true, sortOrder: 10,
+        note: "시드 예시 · 준비 중 — 공개 페이지에 안 나가는 것이 정상",
+      },
+      {
+        serviceId: "SV06", title: "차량 공유 게시판", category: "기타",
+        description: "공항 픽업·카풀 연결 게시판.",
+        howToApply: "",
+        contactName: "", contactPhone: "", fee: 0, status: "중단", isPublic: false, sortOrder: 90,
+        note: "시드 예시 · 이용 저조로 중단. 기록 보존을 위해 행은 남긴다",
+      },
+    ],
   });
 
   /* ── 3-7. 승인 6건 ───────────────────────────────────────────────── */
@@ -1741,6 +1793,7 @@ async function main(): Promise<void> {
     임원: await prisma.officer.count(),
     업소: await prisma.vendor.count(),
     이해상충: await prisma.conflictOfInterest.count(),
+    서비스: await prisma.service.count(),
     거래: await prisma.transaction.count(),
     회비고지: await prisma.duesInvoice.count(),
     기부: await prisma.donation.count(),

@@ -11,3 +11,4 @@ export * from "./transaction";
 export * from "./member";
 export * from "./approval";
 export * from "./donation";
+export * from "./service";

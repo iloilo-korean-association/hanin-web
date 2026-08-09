@@ -31,7 +31,7 @@ export const EMERGENCY_NUMBER = "911";
 /**
  * 라우트 규약 (모든 화면 담당자가 이 표를 따른다)
  *
- *   공개(인증 없음)   /, /ledger, /biz, /sos, /join, /donate, /events, /help
+ *   공개(인증 없음)   /, /ledger, /biz, /services, /sos, /join, /donate, /events, /help
  *   회원(매직링크)    /me/[token]
  *   임원(세션쿠키)    /officer, /officer/login, /officer/receipt,
  *                     /officer/expense, /officer/approve, /officer/audit
@@ -41,6 +41,7 @@ export const ROUTES = {
   home: "/",
   ledger: "/ledger",
   biz: "/biz",
+  services: "/services",
   sos: "/sos",
   about: "/about",
   join: "/join",
@@ -90,6 +91,14 @@ export const PUBLIC_PAGES: PublicNavItem[] = [
     inNav: true,
     priority: 0.7,
     description: "일로일로 지역 한인 업소 안내. 임원 이해관계는 배지로 상시 표시합니다.",
+  },
+  {
+    href: "/services",
+    label: "서비스",
+    labelEn: "Services",
+    inNav: true,
+    priority: 0.7,
+    description: "한인회가 제공하는 서비스 안내. 행정지원·생활정착·긴급지원·교육문화.",
   },
   {
     href: "/sos",

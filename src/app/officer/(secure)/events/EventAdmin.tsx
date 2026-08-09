@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { Badge, formatPeso } from "@/components/ui";
 
 import { AdminCrud, type ColumnSpec, type FieldSpec } from "../../_components/AdminCrud";
@@ -56,9 +58,13 @@ const columns: ColumnSpec<EventRowUI>[] = [
     label: "신청",
     numeric: true,
     render: (r) => (
-      <span>
+      <span className="whitespace-nowrap">
         {r.signupCount}
         {r.capacity > 0 ? ` / ${r.capacity}` : ""}
+        {/* 참가자 명단(개인정보)은 상세 화면에서만 — 임원 로그인 뒤에 있다 */}
+        <Link href={`/officer/events/${r.eventId}`} className="link-ika ml-2 text-sm">
+          명단
+        </Link>
       </span>
     ),
   },

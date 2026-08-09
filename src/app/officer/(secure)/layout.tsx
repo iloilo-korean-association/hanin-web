@@ -71,6 +71,13 @@ export default async function SecureOfficerLayout({ children }: { children: Reac
     },
     { href: `${ROUTES.officer}/audit`, label: "감사", blocked: null },
 
+    // 회원 명부 — 읽기 전용(v1). 개인정보 화면이라 임원(조회권) 전용이다.
+    {
+      href: `${ROUTES.officer}/members`,
+      label: "회원",
+      blocked: me.can("조회권") ? null : '"조회권"이 없는 직책입니다.',
+    },
+
     // ── 자료 관리 ──────────────────────────────────────────────────
     // 권한이 없어도 탭은 보인다. 목록은 열리고 편집만 잠긴다 —
     // 숨기면 "내 권한이 어디까지인지" 를 본인도 확인할 수 없다.
@@ -83,6 +90,11 @@ export default async function SecureOfficerLayout({ children }: { children: Reac
       href: `${ROUTES.officer}/events`,
       label: "행사",
       blocked: writeBlocked ?? (me.can("행사관리") ? null : '"행사관리" 권한이 없습니다.'),
+    },
+    {
+      href: `${ROUTES.officer}/services`,
+      label: "서비스",
+      blocked: writeBlocked ?? (me.can("서비스관리") ? null : '"서비스관리" 권한이 없습니다.'),
     },
     {
       href: `${ROUTES.officer}/contacts`,
