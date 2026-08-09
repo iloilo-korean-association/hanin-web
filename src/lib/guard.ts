@@ -15,6 +15,7 @@ import "server-only";
 import { readOfficerSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { isValidMemberTokenFormat, parsePermissions, type OfficerPermission } from "@/lib/session";
+import { MONEY_PERMISSIONS } from "@/lib/validators";
 
 /* ═══════════════════════════ 에러 ═══════════════════════════ */
 
@@ -82,7 +83,11 @@ export interface OfficerContext {
  */
 export function computeIsAuditor(role: string, permissions: readonly OfficerPermission[]): boolean {
   if (role.includes("감사")) return true;
-  return permissions.length > 0 && permissions.every((p) => p === "조회권");
+  // ★ '돈' 권한만 본다. 자료 관리 권한(업소·행사·연락처·임원관리)은 판정에 넣지 않는다.
+  //   감사에게 업소관리를 주더라도 **돈에 대해서는 여전히 읽기 전용**이어야 하는데,
+  //   전체 권한을 보면 업소관리 하나 때문에 감사 판정이 풀려 수납·승인이 열린다.
+  const money = permissions.filter((p) => MONEY_PERMISSIONS.includes(p as never));
+  return money.length > 0 && money.every((p) => p === "조회권");
 }
 
 function toContext(row: {

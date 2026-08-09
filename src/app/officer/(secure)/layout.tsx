@@ -70,6 +70,30 @@ export default async function SecureOfficerLayout({ children }: { children: Reac
           : "승인권 또는 입력권이 필요합니다(감사는 조회권만 가집니다).",
     },
     { href: `${ROUTES.officer}/audit`, label: "감사", blocked: null },
+
+    // ── 자료 관리 ──────────────────────────────────────────────────
+    // 권한이 없어도 탭은 보인다. 목록은 열리고 편집만 잠긴다 —
+    // 숨기면 "내 권한이 어디까지인지" 를 본인도 확인할 수 없다.
+    {
+      href: `${ROUTES.officer}/vendors`,
+      label: "업소",
+      blocked: writeBlocked ?? (me.can("업소관리") ? null : '"업소관리" 권한이 없습니다.'),
+    },
+    {
+      href: `${ROUTES.officer}/events`,
+      label: "행사",
+      blocked: writeBlocked ?? (me.can("행사관리") ? null : '"행사관리" 권한이 없습니다.'),
+    },
+    {
+      href: `${ROUTES.officer}/contacts`,
+      label: "긴급 연락처",
+      blocked: writeBlocked ?? (me.can("연락처관리") ? null : '"연락처관리" 권한이 없습니다.'),
+    },
+    {
+      href: `${ROUTES.officer}/officers`,
+      label: "권한",
+      blocked: me.can("임원관리") ? null : '"임원관리" 권한이 없습니다.',
+    },
   ];
 
   return (

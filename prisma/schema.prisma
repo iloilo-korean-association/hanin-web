@@ -757,3 +757,57 @@ model OfficerCredential {
 
   officer Officer @relation(fields: [officerId], references: [officerId])
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 긴급 연락처 — 코드 파일(_data/emergency.ts)에서 DB 로 옮긴 것
+//
+// 왜 옮겼나: 전화번호 하나 고치려고 개발자를 불러 재배포해야 했다.
+//   자원봉사 조직에서 그건 "영원히 안 고쳐진다" 와 같은 말이다.
+//
+// 옮기면서 규율은 그대로 가져왔다 — 원본 파일의 원칙이 이것이었다:
+//   "번호를 지어내지 않는다. 긴급 상황에서 틀린 번호는 사람을 죽인다."
+//   그래서 sourceUrl(출처)과 grade(검증등급)를 **필수로** 두고,
+//   grade=pending 이면 화면이 번호를 감추고 "확인 중" 으로 표시한다.
+//
+// ★ 이 표의 데이터는 사람 목숨과 직결된다. 삭제 대신 isActive=false 를 쓴다.
+// ─────────────────────────────────────────────────────────────────────────────
+model EmergencyContact {
+  contactId String @id // EC-0001
+
+  // ── 분류 ──
+  groupId    String // consular / police / rescue / hospital / civil / national
+  groupTitle String // 화면에 뜨는 묶음 제목
+  sortOrder  Int    @default(0)
+
+  // ── 내용 ──
+  name     String // 기관·창구 이름
+  nameEn   String  @default("") // 현지인에게 보여줄 표기
+  numbers  String // 전화번호. 여러 개면 | 로 구분. **표기를 원문 그대로 둔다**(사람이 눈으로 읽고 누른다)
+  note     String  @default("") // 언제 걸어야 하는가 / 주의사항
+  hours    String  @default("") // 운영 시간
+  email    String  @default("")
+  address  String  @default("")
+  emphasis Boolean @default(false) // 911·공관 야간처럼 강조할 항목
+
+  // ── 검증 (이게 이 표의 핵심이다) ──
+  /**
+   * /** verified = 공식 사이트 확인 / secondary = 2차 출처(뉴스·디렉터리) / pending = 미확인
+   */
+  grade      String  @default("pending")
+  /**
+   * 어디서 확인했는가. grade 가 pending 이 아니면 반드시 채운다
+   */
+  sourceUrl  String  @default("")
+  /**
+   * 마지막으로 사람이 직접 확인한 날 (yyyy-MM-dd)
+   */
+  verifiedOn String  @default("")
+  isActive   Boolean @default(true)
+
+  updatedBy String   @default("SYSTEM")
+  updatedAt DateTime @updatedAt
+
+  @@index([groupId, sortOrder])
+  @@index([isActive])
+  @@index([grade])
+}

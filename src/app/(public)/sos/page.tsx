@@ -18,13 +18,8 @@ import { cfgStr, hotlineFrom, loadSettings } from "@/lib/domain";
 import { EMERGENCY_NUMBER, ORG_NAME, ROUTES, absoluteUrl } from "@/lib/site";
 
 import { ContactGroupCard, EmergencyBanner, GradeBadge } from "../_components/emergency-ui";
-import {
-  CONTACTS_VERIFIED_ON,
-  CONTACT_GROUPS,
-  PLAYBOOKS,
-  WE_DO,
-  WE_DONT,
-} from "../_data/emergency";
+import { PLAYBOOKS, WE_DO, WE_DONT } from "../_data/emergency";
+import { loadEmergencyContacts } from "../_data/load-contacts";
 
 export const metadata: Metadata = {
   title: "긴급 연락처",
@@ -56,6 +51,8 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function SosPage() {
+  // 연락처는 DB에서 온다(/officer/contacts 에서 관리). 예전에는 코드 상수였다.
+  const { groups: contactGroups, verifiedOn } = await loadEmergencyContacts();
   const settings = await loadSettings(prisma);
   const hotline = hotlineFrom(settings);
   const facebook = cfgStr(settings, "웹앱.페이스북", "");
@@ -177,12 +174,12 @@ export default async function SosPage() {
             못해 <b>번호를 비워 둔</b> 항목입니다.
           </p>
           <p className="mb-4 text-sm text-ink-muted">
-            최종 검증일 <b className="tnum">{CONTACTS_VERIFIED_ON}</b> · 번호는 바뀝니다. 통화가 안
+            최종 검증일 <b className="tnum">{verifiedOn || "확인 중"}</b> · 번호는 바뀝니다. 통화가 안
             되면 알려 주십시오.
           </p>
 
           <Stack gap="md">
-            {CONTACT_GROUPS.map((g) => (
+            {contactGroups.map((g) => (
               <ContactGroupCard key={g.id} group={g} />
             ))}
           </Stack>
