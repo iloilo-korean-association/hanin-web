@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { SYSTEM_ADMIN_ROLE } from "@/lib/validators";
 import Link from "next/link";
 
 import {
@@ -96,7 +97,11 @@ export default async function AboutPage() {
   const facebook = cfgStr(settings, "웹앱.페이스북", "");
 
   const [officers, conflicts, vendors] = await Promise.all([
-    prisma.officer.findMany({ where: { status: "ACTIVE" }, orderBy: { officerId: "asc" } }),
+    // 관리자 계정은 실제 사람이 아니므로 공개 임원 명단에서 뺀다.
+    prisma.officer.findMany({
+      where: { status: "ACTIVE", role: { not: SYSTEM_ADMIN_ROLE } },
+      orderBy: { officerId: "asc" },
+    }),
     prisma.conflictOfInterest.findMany({ where: { disclosed: true } }),
     prisma.vendor.findMany({ where: { relatedParty: true } }),
   ]);

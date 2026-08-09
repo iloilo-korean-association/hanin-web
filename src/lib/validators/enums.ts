@@ -146,6 +146,20 @@ export const PERMISSIONS = ["승인권", "조회권", "입력권"] as const;
 export const zPermission = z.enum(PERMISSIONS);
 export type Permission = (typeof PERMISSIONS)[number];
 
+/**
+ * 운영·설정용 계정의 직책. **실제 사람이 아니다.**
+ *
+ * 전 권한(승인권·조회권·입력권)을 가지므로 임원 화면은 전부 열리지만,
+ * 다음 두 곳에서는 반드시 제외한다:
+ *   ① 공개 임원 명단(/about) — 없는 사람을 한인회 임원이라고 공시하면 안 된다
+ *   ② 긴급 대응 통보 라인 — 받는 사람이 없는 주소로 알림이 나가면
+ *      "통보했다"는 기록만 남고 실제로는 아무도 못 받는다. 그게 가장 위험하다.
+ *
+ * 이 계정도 I4(현금 2인 확인)와 이해상충 회피의 예외가 아니다 —
+ * 그 둘은 권한이 아니라 **신원**으로 판정하기 때문이다.
+ */
+export const SYSTEM_ADMIN_ROLE = "관리자";
+
 /** 'ACTIVE'/'INACTIVE' — 회원·임원 공통 */
 export const ON_OFF_STATUSES = ["ACTIVE", "INACTIVE"] as const;
 export const zOnOffStatus = z.enum(ON_OFF_STATUSES);

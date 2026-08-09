@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import { cfgNum, cfgStr, escapeHtml, loadSettings, manilaDateTimeStr, todayManila } from "@/lib/domain";
 import { queueMail } from "@/lib/mail";
 import { EMERGENCY_NUMBER } from "@/lib/site";
+import { SYSTEM_ADMIN_ROLE } from "@/lib/validators";
 
 import { fail, textOf, zodFieldErrors, zodSummary, type FormResult } from "../_shared";
 import {
@@ -136,8 +137,10 @@ export async function submitHelpRequest(_prev: HelpState, formData: FormData): P
   const input = parsed.data;
 
   /* ③ 통보 대상 — R-4 이해상충 회피를 실제 수신자 목록에 반영한다. */
+  // 관리자 계정은 받는 사람이 없는 운영용 주소다. 통보 라인에 넣으면
+  // "통보했다"는 기록만 남고 실제로는 아무도 못 받는다 — 긴급 상황에서 가장 위험한 실패다.
   const officers = await prisma.officer.findMany({
-    where: { status: "ACTIVE" },
+    where: { status: "ACTIVE", role: { not: SYSTEM_ADMIN_ROLE } },
     select: { officerId: true, name: true, role: true, email: true, phone: true },
   });
   const presidentRecused = input.conflictCheck === "대표 사업체 관계자";
