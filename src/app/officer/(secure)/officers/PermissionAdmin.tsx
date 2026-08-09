@@ -87,8 +87,8 @@ export function PermissionAdmin({
                   {MONEY_PERMISSIONS.map((p) => (
                     <Checkbox
                       key={p}
-                      id={`perm_`}
-                      name={`perm_`}
+                      id={`perm_${p}`}
+                      name={`perm_${p}`}
                       defaultChecked={editing.permissions.includes(p)}
                       label={p}
                       description={PERMISSION_HELP[p]}
@@ -103,8 +103,8 @@ export function PermissionAdmin({
                   {ADMIN_PERMISSIONS.map((p) => (
                     <Checkbox
                       key={p}
-                      id={`perm_`}
-                      name={`perm_`}
+                      id={`perm_${p}`}
+                      name={`perm_${p}`}
                       defaultChecked={editing.permissions.includes(p)}
                       label={p}
                       description={PERMISSION_HELP[p]}
