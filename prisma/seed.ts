@@ -23,6 +23,8 @@ import { randomBytes } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
+import { assertDestructiveAllowed } from "./db-guard";
+
 import {
   auditBalances,
   accountBalancesAsOf,
@@ -409,8 +411,13 @@ function evidence(prefix: string, date: string, tag: string): string {
 }
 
 async function main(): Promise<void> {
+  // ★ 아래 3-0 은 전 테이블을 비운다. 대상이 맞는 DB 인지 **먼저** 확인한다.
+  //   이 줄이 없어서 운영 DB 가 두 번 비워졌다. 지우기 전에 묻는 것이 순서다.
+  const target = assertDestructiveAllowed("시드 (전 테이블 삭제 후 데모 데이터 재적재)");
+
   console.log("─".repeat(72));
   console.log("일로일로 한인회 — 시드 시작");
+  console.log(`대상 DB: ${target.host} / ${target.database}${target.isLocal ? " (로컬)" : ""}`);
   console.log("─".repeat(72));
 
   resetNotifySeqCache();

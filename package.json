@@ -12,11 +12,14 @@
     "build:next": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "db:push": "prisma db push",
+    "db:guard": "tsx prisma/db-guard.ts",
+    "db:push": "npm run db:guard && prisma db push",
     "db:generate": "prisma generate",
     "db:seed": "tsx prisma/seed.ts",
-    "db:reset": "prisma db push --force-reset --skip-generate && prisma generate && tsx prisma/seed.ts",
-    "db:studio": "prisma studio"
+    "db:reset": "npm run db:guard && prisma db push --force-reset --skip-generate && prisma generate && tsx prisma/seed.ts",
+    "db:studio": "prisma studio",
+    "db:admin": "tsx prisma/ensure-admin.ts",
+    "db:password": "tsx prisma/set-password.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
