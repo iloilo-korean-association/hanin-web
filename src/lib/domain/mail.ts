@@ -126,6 +126,14 @@ export type QueueMailInput = {
   relatedId?: string;
   trigger?: string;
   sentAt?: Date;
+  /**
+   * NotifyLog 초기 결과.
+   * · 기본 "SUCCESS" — 현행(발송함 기록 = 완료) 그대로. 시드·실발송 미설정 환경이 여기다.
+   * · "DEFERRED"    — 실발송 워커(@/lib/mail-sender)가 있을 때만. 워커가 발송 후
+   *                   SUCCESS/FAIL 로 갱신한다. 값은 validators/enums 의 NOTIFY_RESULTS 안이다.
+   * ★ 화면 호출부는 이 필드를 직접 쓰지 않는다 — 앱 레벨 어댑터(@/lib/mail)가 환경을 보고 정한다.
+   */
+  initialResult?: "SUCCESS" | "DEFERRED";
 };
 
 /**
@@ -148,7 +156,7 @@ export async function queueMail(db: Db, input: QueueMailInput): Promise<{ logId:
       toMasked: maskEmail(input.toEmail),
       subject: input.subject,
       relatedId: input.relatedId ?? "",
-      result: "SUCCESS",
+      result: input.initialResult ?? "SUCCESS",
       trigger: input.trigger ?? "queueMail",
     },
   });
@@ -182,8 +190,10 @@ export async function issueMagicLink(
     officerId?: string | null;
     ttlHours?: number;
     now?: Date;
+    /** QueueMailInput.initialResult 와 같다. 앱 레벨 어댑터만 넘긴다. */
+    initialResult?: "SUCCESS" | "DEFERRED";
   },
-): Promise<{ token: string; linkPath: string }> {
+): Promise<{ token: string; linkPath: string; outboxId: string }> {
   const token = newMagicToken();
   const linkPath = magicLinkPath(token);
   const now = opt.now ?? new Date();
@@ -203,7 +213,7 @@ export async function issueMagicLink(
   });
 
   const who = opt.name ? escapeHtml(opt.name) + "님" : "안녕하세요";
-  await queueMail(db, {
+  const queued = await queueMail(db, {
     kind: "매직링크",
     toEmail: opt.email,
     toName: opt.name ?? "",
@@ -217,9 +227,10 @@ export async function issueMagicLink(
     memberNo: opt.memberNo ?? null,
     trigger: "issueMagicLink",
     sentAt: now,
+    initialResult: opt.initialResult,
   });
 
-  return { token, linkPath };
+  return { token, linkPath, outboxId: queued.outboxId };
 }
 
 /* ── 기본 템플릿 (설정에 값이 없을 때) ──────────────────────────────── */

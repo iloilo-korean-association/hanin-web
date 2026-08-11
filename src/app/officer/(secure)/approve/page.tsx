@@ -41,6 +41,7 @@ import {
 import { isGuardError, requireOfficer } from "@/lib/guard";
 import { ROUTES } from "@/lib/site";
 
+import { toViewUrl } from "../../_lib/evidence-view";
 import { toOfficerRow } from "../../_lib/server-utils";
 import { DecisionForm } from "./DecisionForm";
 import { ExecuteForm } from "./ExecuteForm";
@@ -143,7 +144,7 @@ export default async function ApprovePage() {
       : "집행(장부 기입)은 입력권이 필요합니다. 결재만 하시고 집행은 총무에게 넘기십시오.");
 
   /* ── 건별 판정 ── */
-  const rows = openApprovals.map((ap) => {
+  const rows = await Promise.all(openApprovals.map(async (ap) => {
     const verdict = evaluateConflict(
       { counterpartyName: ap.counterpartyName, vendorId: ap.vendorId },
       vendors,
@@ -181,8 +182,11 @@ export default async function ApprovePage() {
           : !trail.ok
             ? trail.reason
             : null);
-    return { ap, verdict, gate, route, trail, quoteMissing, executeBlocked };
-  });
+    // 비공개 Blob 견적서는 그대로 열면 403 — 렌더 시점에 서명 URL 로 바꾼다.
+    // (로컬 폴백 상대경로·구 데이터의 일반 URL 은 toViewUrl 이 그대로 돌려준다)
+    const quoteViewUrl = await toViewUrl(ap.quoteUrl);
+    return { ap, verdict, gate, route, trail, quoteMissing, executeBlocked, quoteViewUrl };
+  }));
 
   const waiting = rows.filter((r) => r.ap.finalStatus === "대기");
   const toExecute = rows.filter((r) => r.ap.finalStatus === "승인" && !r.ap.executedReceiptNo);
@@ -236,7 +240,7 @@ export default async function ApprovePage() {
             </Card>
           ) : (
             <Stack>
-              {waiting.map(({ ap, verdict, gate, route }) => (
+              {waiting.map(({ ap, verdict, gate, route, quoteViewUrl }) => (
                 <Card key={ap.approvalId} as="article">
                   <CardHeader
                     title={
@@ -292,7 +296,8 @@ export default async function ApprovePage() {
                         />
                         {ap.quoteUrl ? (
                           <p className="mt-2 text-sm">
-                            <a className="link-ika" href={ap.quoteUrl} target="_blank" rel="noreferrer">
+                            {/* 서명 URL — 몇 분 뒤 만료된다. 안 열리면 페이지 새로고침. */}
+                            <a className="link-ika" href={quoteViewUrl} target="_blank" rel="noreferrer">
                               첨부된 견적서 보기
                             </a>
                           </p>

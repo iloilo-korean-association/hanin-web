@@ -144,7 +144,7 @@ export function PhotoField({
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-success">첨부됨 — {info}</p>
             <p className="text-sm text-ink-muted">
-              저장하면 <code>public/uploads/</code> 에 파일로 남습니다.
+              저장하면 임원만 볼 수 있는 증빙 저장소에 보관됩니다.
             </p>
           </div>
           <Button type="button" variant="secondary" size="sm" onClick={clear}>

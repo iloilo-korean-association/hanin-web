@@ -26,11 +26,13 @@
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
+    "@vercel/blob": "^2.8.0",
     "bcryptjs": "^3.0.3",
     "jose": "^6.2.3",
     "next": "16.2.7",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "resend": "^6.19.0",
     "server-only": "^0.0.1",
     "zod": "^4.4.3"
   },

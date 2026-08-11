@@ -1,25 +1,32 @@
 /**
- * 증빙 파일 저장.
+ * 증빙·사진 파일 저장 — 저장소 어댑터.
  *
- * ── 왜 `public/uploads/` 인가 (DB blob 이 아니라) ─────────────────────────
- *  1) 시드가 이미 `/uploads/receipts/…` 형태의 상대경로를 증빙URL 로 넣어 두었고
- *     (prisma/seed.ts 의 evidence()), zEvidenceUrl 도 `/` 로 시작하는 경로를 허용한다.
- *     같은 규약을 그대로 쓰면 시드 데이터와 새로 찍은 사진이 한 화면에서 똑같이 동작한다.
- *  2) 정적 파일이라 Next 가 그냥 서빙한다 — 이미지 서빙용 Route Handler 를 따로 만들 필요가 없고,
- *     인쇄(결산을 종이로 뽑는 일이 실제로 있다)에서도 <img> 가 그대로 나온다.
- *  3) SQLite 파일 하나에 사진 blob 을 넣으면 dev.db 가 금방 수십 MB 가 된다.
- *     이 프로토타입은 대표가 폴더째 열어 보고 지우기도 해야 한다.
+ * ── 두 개의 백엔드, 하나의 인터페이스 ────────────────────────────────────
+ *  · BLOB_READ_WRITE_TOKEN 있음  → Vercel Blob (`put`, access:"private") 에 올리고
+ *    비공개 URL 을 돌려준다. Vercel 서버리스는 파일시스템 쓰기가 배포마다
+ *    날아가므로 운영은 반드시 이쪽이다.
+ *  · 없음                        → 현행 그대로 `public/` 아래 로컬 저장 (개발용 폴백).
+ *  호출부는 반환된 url 문자열만 쓰므로 어느 쪽이든 코드가 같다.
+ *  (zEvidenceUrl 은 `https://` 와 `/` 시작을 둘 다 허용한다 — validators/common.ts)
  *
- *  ★ 프로덕션에서는 그대로 쓰면 안 된다. 서버 파일시스템은 배포마다 날아가고,
- *    public/ 은 인증이 없어 URL 을 아는 사람은 누구나 영수증 사진을 본다.
- *    이식 시 S3/R2 + 서명 URL 로 바꾸고, 이 파일 하나만 교체하면 되도록 격리해 두었다.
- *    [확인 필요] 영수증 사진에 회원 실명·계좌번호가 찍히는 경우가 있으므로
- *    프로덕션 저장소는 반드시 비공개 버킷이어야 한다.
+ * ── 범용화 ──────────────────────────────────────────────────────────────
+ *  회원 사진(P3) 등 임원 증빙 밖에서도 쓸 수 있게 경로 프리픽스를 받는
+ *  saveDataUrlTo() 를 노출한다. 기존 호출부(수납·지출·승인)는 saveDataUrl() 그대로 —
+ *  인터페이스 무변경.
+ *
+ * ── 개인정보 ─────────────────────────────────────────────────────────────
+ *  운영 스토어는 **Private 모드**다. 업로드는 access:"private" 로 하고, 반환
+ *  URL(https://<id>.private.blob.vercel-storage.com/…)은 인증 없이 열면 403 이다.
+ *  화면에 보여줄 때는 evidence-view.ts 의 toViewUrl() 로 렌더 시점에 짧은
+ *  만료시간의 서명 URL 을 만들어 쓴다 — 영수증에 실명·계좌가 찍혀도 링크가
+ *  새어나가면 몇 분 뒤 죽는다. 파일명의 시각+난수(40비트)는 스토어 안에서의
+ *  추측·충돌 방지용으로 그대로 둔다. 단, 로컬 폴백의 public/ 은 여전히 누구나
+ *  접근 가능하다 — 개발 전용이며 민감 사진을 오래 두지 않는다.
  *
  * ── 고아 파일이 남는 것은 의도된 선택이다 ────────────────────────────────
  *  저장은 DB 트랜잭션 **밖에서** 먼저 한다. 그래서 뒤이은 검증(I5 마감연도·이해상충·승인액 초과 …)
- *  이 거절하면 파일만 남는다. 반대로 트랜잭션 안에서 파일을 쓰면 느린 디스크 I/O 동안 SQLite
- *  쓰기 락을 잡고 있게 되고, 롤백해도 파일은 어차피 남는다(파일시스템은 트랜잭션이 아니다).
+ *  이 거절하면 파일만 남는다. 반대로 트랜잭션 안에서 파일을 쓰면 느린 I/O 동안 DB
+ *  쓰기 락을 잡고 있게 되고, 롤백해도 파일은 어차피 남는다(저장소는 트랜잭션이 아니다).
  *  → 고아 파일은 무해하고 사람이 지울 수 있다. 놓친 영수증 사진은 되돌릴 수 없다.
  *  [확인 필요] 프로덕션에서는 참조되지 않는 업로드를 주기적으로 청소하는 배치가 필요하다.
  *
@@ -35,6 +42,8 @@ import { randomBytes } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import { put } from "@vercel/blob";
+
 /** dataURL 문자 수 상한. 서버 액션 body 1MB 안에서 여유를 둔 값. */
 const MAX_DATAURL_CHARS = 780_000;
 
@@ -48,21 +57,39 @@ const MIME_EXT: Readonly<Record<string, string>> = {
 
 export type SaveResult = { ok: true; url: string; bytes: number } | { ok: false; message: string };
 
-/** 업로드 하위 폴더. 자유 문자열을 받지 않는다 — 경로 탈출을 애초에 불가능하게 한다. */
+/** 임원 증빙 업로드 하위 폴더. 자유 문자열을 받지 않는다 — 경로 탈출을 애초에 불가능하게 한다. */
 export type UploadFolder = "receipts" | "expenses" | "quotes";
 
 const DATA_URL_RE = /^data:([a-zA-Z0-9.+/-]+);base64,([A-Za-z0-9+/=]+)$/;
 
 /**
- * dataURL 을 public/uploads/<folder>/ 아래 파일로 저장하고 웹 경로를 돌려준다.
- *
- * @param dateStr 파일명 앞에 붙일 'yyyy-MM-dd' (폴더를 열었을 때 사람이 찾을 수 있게)
+ * 저장 경로 프리픽스 규칙: 소문자·숫자·하이픈 세그먼트를 `/` 로 이은 것.
+ * `..`·선행 `/`·빈 세그먼트가 문법상 불가능하므로 경로 탈출이 성립하지 않는다.
  */
-export async function saveDataUrl(
+const PREFIX_RE = /^[a-z0-9-]+(\/[a-z0-9-]+)*$/;
+
+function blobEnabled(): boolean {
+  return Boolean(process.env.BLOB_READ_WRITE_TOKEN?.trim());
+}
+
+/**
+ * dataURL 을 저장소(프리픽스 아래)에 저장하고 웹에서 접근 가능한 URL 을 돌려준다.
+ *
+ * 임원 증빙은 saveDataUrl() 을 쓰고, 다른 용도(회원 사진 등)는 이 함수를 직접 쓴다.
+ *
+ * @param prefix  저장 경로 프리픽스 (예: "uploads/receipts", "members/photos"). PREFIX_RE 준수.
+ * @param dateStr 파일명 앞에 붙일 'yyyy-MM-dd' (저장소를 열었을 때 사람이 찾을 수 있게)
+ */
+export async function saveDataUrlTo(
+  prefix: string,
   dataUrl: string,
-  folder: UploadFolder,
   dateStr: string,
 ): Promise<SaveResult> {
+  if (!PREFIX_RE.test(prefix)) {
+    // 호출 코드의 버그다 — 사용자 입력이 여기 올 수 없다. 그래도 서버는 다시 검사한다.
+    return { ok: false, message: `저장 경로 프리픽스가 규칙에 맞지 않습니다: ${prefix}` };
+  }
+
   const raw = String(dataUrl ?? "").trim();
   if (!raw) return { ok: false, message: "첨부 파일이 비어 있습니다." };
 
@@ -98,8 +125,36 @@ export async function saveDataUrl(
   // 파일명에 사람이 준 문자열을 절대 넣지 않는다. 날짜 + 난수만 쓴다.
   const safeDate = /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? dateStr : "0000-00-00";
   const fileName = `${safeDate}_${randomBytes(5).toString("hex")}.${ext}`;
+  const storagePath = `${prefix}/${fileName}`;
 
-  const dir = path.join(process.cwd(), "public", "uploads", folder);
+  /* ── Vercel Blob (운영) ─────────────────────────────────────────────── */
+  if (blobEnabled()) {
+    try {
+      const blob = await put(storagePath, buf, {
+        // 스토어가 Private 모드라 "public" 은 서버가 거부한다. 조회는 evidence-view.ts 의 서명 URL 로.
+        access: "private",
+        contentType: mime,
+        // 파일명에 우리 난수가 이미 있다. Blob 이 또 붙이면 사람이 못 찾는 이름이 된다.
+        addRandomSuffix: false,
+        // SDK 자동감지에 맡기면 OIDC 경로로 빠져 로컬에서 실패한다
+        // ("OIDC is enabled for this project, but not for the development environment").
+        // blobEnabled() 가 이미 이 변수의 존재를 보장한다 — 항상 명시해서 어디서든 같게 동작시킨다.
+        token: process.env.BLOB_READ_WRITE_TOKEN,
+      });
+      return { ok: true, url: blob.url, bytes: buf.byteLength };
+    } catch (e) {
+      return {
+        ok: false,
+        message:
+          "파일 저장소(Vercel Blob) 업로드에 실패했습니다: " +
+          (e instanceof Error ? e.message : String(e)) +
+          " — 잠시 후 다시 시도해 주십시오.",
+      };
+    }
+  }
+
+  /* ── 로컬 폴백 (개발) ───────────────────────────────────────────────── */
+  const dir = path.join(process.cwd(), "public", ...prefix.split("/"));
   try {
     await mkdir(dir, { recursive: true });
     await writeFile(path.join(dir, fileName), buf);
@@ -109,9 +164,21 @@ export async function saveDataUrl(
       message:
         "첨부 파일을 저장하지 못했습니다: " +
         (e instanceof Error ? e.message : String(e)) +
-        " — public/uploads 폴더 쓰기 권한을 확인해 주십시오.",
+        ` — public/${prefix} 폴더 쓰기 권한을 확인해 주십시오.`,
     };
   }
 
-  return { ok: true, url: `/uploads/${folder}/${fileName}`, bytes: buf.byteLength };
+  return { ok: true, url: `/${storagePath}`, bytes: buf.byteLength };
+}
+
+/**
+ * 임원 증빙 저장 — 기존 호출부(수납·지출·승인) 인터페이스 그대로.
+ * 시드가 넣은 `/uploads/<folder>/…` 경로 규약과 같은 프리픽스를 쓴다.
+ */
+export async function saveDataUrl(
+  dataUrl: string,
+  folder: UploadFolder,
+  dateStr: string,
+): Promise<SaveResult> {
+  return saveDataUrlTo(`uploads/${folder}`, dataUrl, dateStr);
 }

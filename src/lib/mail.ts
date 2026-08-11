@@ -6,17 +6,18 @@
  *   이 파일은 (1) prisma 를 미리 물려 주고 (2) /dev/outbox 가 읽을 조회 함수를 더한다.
  *   같은 일을 두 군데서 하면 반드시 어긋난다 — 그래서 재구현하지 않았다.
  *
- * 왜 메일을 안 보내는가:
- *   로컬 프로토타입은 외부 메일 프로바이더에 가입하지 않는다(계정 0개 원칙).
- *   대신 "이런 메일이 이렇게 나간다" 를 대표가 눈으로 확인할 수 있어야 한다.
- *   → /dev/outbox 에서 제목·수신자·본문 HTML 을 그대로 본다.
- *   → 매직링크도 실제 발송 대신 outbox 에서 눌러서 들어간다.
+ * 실발송 (RESEND_API_KEY 가 있을 때만):
+ *   발송함 기록은 위와 완전히 동일하게 남고(NotifyLog.result 만 "DEFERRED" 로 시작),
+ *   응답이 나간 **뒤에**(after) @/lib/mail-sender 가 실제로 보내고 SUCCESS/FAIL 로 갱신한다.
+ *   after 를 쓰는 이유: 발송은 외부 API 왕복이라 느리다 — 트랜잭션·응답을 붙잡으면 안 된다.
+ *   키가 없으면(로컬·현행 운영) 예전과 완전히 같다: 발송함 기록만 하고 /dev/outbox 로 본다.
  *
  * 프로덕션 이식:
- *   queueMail() 호출부는 한 줄도 안 바뀐다. 뒤에 워커를 붙여
- *   NotifyLog.result 를 SUCCESS/FAIL 로 갱신하면 된다.
+ *   queueMail() 호출부는 한 줄도 안 바뀐다. 위 워커가 그 "뒤에 붙인 워커"다.
  */
 import "server-only";
+
+import { after } from "next/server";
 
 import { prisma } from "@/lib/db";
 import {
@@ -24,7 +25,27 @@ import {
   queueMail as domainQueueMail,
   type QueueMailInput,
 } from "@/lib/domain/mail";
+import { mailSendingEnabled, sendOutboxMail } from "@/lib/mail-sender";
 import type { MagicPurpose } from "@/lib/validators/enums";
+
+/**
+ * 발송함 1건의 실발송을 응답 경로 밖으로 예약한다.
+ * after() 는 서버 액션·라우트 핸들러·서버 컴포넌트 안에서만 동작한다(요청 컨텍스트 필요).
+ * 그 밖(스크립트 등)에서 불리면 fire-and-forget 으로 대체한다 — 어느 쪽이든
+ * 오류는 sendOutboxMail 이 NotifyLog 에 기록하므로 여기서 삼켜도 유실되지 않는다.
+ */
+function scheduleSend(outboxId: string): void {
+  const run = (): Promise<void> =>
+    sendOutboxMail(outboxId).then(
+      () => undefined,
+      (e) => console.error(`[mail] 발송 예약 실패 (outbox ${outboxId}):`, e),
+    );
+  try {
+    after(run);
+  } catch {
+    void run();
+  }
+}
 
 /** 템플릿·경로·토큰 유틸은 그대로 다시 내보낸다. 화면은 "@/lib/mail" 하나만 알면 된다. */
 export {
@@ -50,7 +71,13 @@ export {
  * 트랜잭션 밖(대부분의 경우)에서는 이 함수를 쓴다.
  */
 export async function queueMail(input: QueueMailInput) {
-  return domainQueueMail(prisma, input);
+  const deferred = mailSendingEnabled();
+  const queued = await domainQueueMail(prisma, {
+    ...input,
+    initialResult: deferred ? "DEFERRED" : "SUCCESS",
+  });
+  if (deferred) scheduleSend(queued.outboxId);
+  return queued;
 }
 
 /** 매직링크를 만들고 그 링크가 담긴 메일을 발송함에 넣는다. */
@@ -64,7 +91,13 @@ export async function issueMagicLink(opt: {
   ttlHours?: number;
   now?: Date;
 }): Promise<{ token: string; linkPath: string }> {
-  return domainIssueMagicLink(prisma, opt);
+  const deferred = mailSendingEnabled();
+  const issued = await domainIssueMagicLink(prisma, {
+    ...opt,
+    initialResult: deferred ? "DEFERRED" : "SUCCESS",
+  });
+  if (deferred) scheduleSend(issued.outboxId);
+  return { token: issued.token, linkPath: issued.linkPath };
 }
 
 /* ═══════════════════════ 조회 (/dev/outbox 전용) ═══════════════════════ */
