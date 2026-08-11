@@ -27,7 +27,17 @@ import {
   type StatItem,
 } from "@/components/ui";
 import { prisma } from "@/lib/db";
-import { cfgNum, cfgStr, loadSettings, manilaDateTimeStr, todayManila } from "@/lib/domain";
+import {
+  buildMemberPayments,
+  cfgNum,
+  cfgStr,
+  loadSettings,
+  manilaDateTimeStr,
+  PAYMENT_KINDS_IN,
+  todayManila,
+  type MemberTxRow,
+  type PaymentKind,
+} from "@/lib/domain";
 import { ROUTES } from "@/lib/site";
 
 import { memberLogoutAction } from "../../(public)/login/actions";
@@ -54,28 +64,35 @@ const DUES_TONE: Record<string, BadgeTone> = {
   면제: "neutral",
 };
 
+/** 통합 납부 내역의 구분 배지 색. 글자가 항상 함께 나가므로 색만으로 의미를 싣지 않는다. */
+const KIND_TONE: Record<PaymentKind, BadgeTone> = {
+  회비: "info",
+  행사비: "neutral",
+  기부: "success",
+  기타: "neutral",
+  지급: "warn",
+};
+
 export async function MemberPortal({
   memberNo,
   mode,
+  year: yearParam,
 }: {
   memberNo: string;
   mode: "token" | "session";
+  /** ?year= 쿼리 원문. 검증 전이므로 신뢰하지 않는다 — 실제 연도 목록 안에서만 고른다. */
+  year?: string | undefined;
 }) {
   const settings = await loadSettings(prisma);
   const fiscalYear = cfgNum(settings, "회계연도", Number(todayManila().slice(0, 4)));
   const rosterMax = cfgNum(settings, "웹앱.명부최대", 400);
   const contactEmail = cfgStr(settings, "웹앱.문의이메일", "");
 
-  const [member, roster] = await Promise.all([
+  const [member, roster, txYears] = await Promise.all([
     prisma.member.findUniqueOrThrow({
       where: { memberNo },
       include: {
         duesInvoices: { orderBy: { fiscalYear: "desc" } },
-        counterpartyTxs: {
-          orderBy: [{ date: "desc" }, { seq: "desc" }],
-          take: 30,
-          include: { category: { select: { publicName: true } } },
-        },
         eventSignups: {
           orderBy: { appliedAt: "desc" },
           include: { event: { select: { title: true, startsAt: true, place: true } } },
@@ -89,34 +106,97 @@ export async function MemberPortal({
       orderBy: [{ name: "asc" }],
       take: rosterMax,
     }),
+    // 연도 필터에 보여 줄 회계연도 — 이 회원의 거래가 실제로 있는 해만
+    prisma.transaction.groupBy({
+      by: ["fiscalYear"],
+      where: { counterpartyMemberNo: memberNo },
+    }),
   ]);
 
-  const thisYear = member.duesInvoices.find((d) => d.fiscalYear === fiscalYear) ?? null;
-  const paidTotal = member.counterpartyTxs
-    .filter((t) => t.direction === "IN" && t.status === "POSTED")
-    .reduce((s, t) => s + t.amountPhp, 0);
+  /* ── 연도 필터 — 거래·고지가 있는 해 + 현재 회계연도. 기본은 올해(설정 회계연도) ── */
+  const years = [
+    ...new Set([
+      fiscalYear,
+      ...txYears.map((y) => y.fiscalYear),
+      ...member.duesInvoices.map((d) => d.fiscalYear),
+    ]),
+  ].sort((a, b) => b - a);
+  const askedYear = Number(yearParam);
+  const year = years.includes(askedYear) ? askedYear : fiscalYear;
+
+  /* ── 통합 납부 내역 — 선택 연도의 05_거래 전 건. 30건 제한 없음.
+        합계 규칙은 공개 회계와 동일(buildMemberPayments 주석 참조). ── */
+  const txs = await prisma.transaction.findMany({
+    where: { counterpartyMemberNo: memberNo, fiscalYear: year },
+    orderBy: [{ date: "desc" }, { seq: "desc" }],
+    include: {
+      category: { select: { publicName: true, midType: true } },
+      // 각 원장과의 연결 — 회비고지(최종수납), 기부, 행사신청이 이 영수증을 가리키면 표시한다
+      duesInvoices: { select: { invoiceId: true } },
+      donations: { select: { donationId: true } },
+      eventSignups: { select: { signupId: true, event: { select: { title: true } } } },
+    },
+  });
+
+  const { rows, summary } = buildMemberPayments(
+    txs.map(
+      (t): MemberTxRow => ({
+        receiptNo: t.receiptNo,
+        date: t.date,
+        direction: t.direction,
+        amountPhp: t.amountPhp,
+        counterpartyType: t.counterpartyType,
+        method: t.method,
+        memo: t.memo,
+        status: t.status,
+        voidReason: t.voidReason,
+        fiscalYear: t.fiscalYear,
+        seq: t.seq,
+        categoryMidType: t.category.midType,
+        categoryName: t.category.publicName,
+      }),
+    ),
+  );
+  /** 영수증번호 → 연결된 원장 표기 (회비고지 ID · 기부 ID · 행사명) */
+  const linksByReceipt = new Map(
+    txs.map((t) => [
+      t.receiptNo,
+      [
+        ...t.duesInvoices.map((d) => `회비고지 ${d.invoiceId}`),
+        ...t.donations.map((d) => `기부 ${d.donationId}`),
+        ...t.eventSignups.map((s) => `행사 「${s.event.title}」 (${s.signupId})`),
+      ],
+    ]),
+  );
+
+  const selectedInvoice = member.duesInvoices.find((d) => d.fiscalYear === year) ?? null;
+  const subtotalText = PAYMENT_KINDS_IN.filter((k) => summary.byKind[k] > 0)
+    .map((k) => `${k} ${formatPeso(summary.byKind[k])}`)
+    .join(" · ");
 
   const stats: StatItem[] = [
     {
-      label: `${fiscalYear}년 회비`,
-      labelEn: "Dues",
-      value: thisYear ? formatPeso(thisYear.billedAmount) : "—",
-      sub: thisYear ? `납기 ${thisYear.dueOn}` : "고지 없음",
-      tone: "neutral",
-    },
-    {
-      label: "납부액",
-      labelEn: "Paid",
-      value: thisYear ? formatPeso(thisYear.paidAmount) : "—",
-      sub: thisYear?.lastPaidOn ? `최종 납부 ${thisYear.lastPaidOn}` : "기록 없음",
+      label: `${year}년 납부 합계`,
+      labelEn: "Paid total",
+      value: formatPeso(summary.paidTotal),
+      sub: subtotalText || "확정된 납부가 없습니다",
       tone: "income",
     },
     {
-      label: "미납액",
-      labelEn: "Unpaid",
-      value: thisYear ? formatPeso(thisYear.unpaidAmount) : "—",
-      sub: thisYear ? thisYear.status : "—",
-      tone: thisYear && thisYear.unpaidAmount > 0 ? "expense" : "balance",
+      label: `${year}년 회비 미납 잔액`,
+      labelEn: "Dues unpaid",
+      value: selectedInvoice ? formatPeso(selectedInvoice.unpaidAmount) : "—",
+      sub: selectedInvoice
+        ? `${selectedInvoice.status} · 고지 ${formatPeso(selectedInvoice.billedAmount)} · 납기 ${selectedInvoice.dueOn}`
+        : "고지 없음",
+      tone: selectedInvoice && selectedInvoice.unpaidAmount > 0 ? "expense" : "balance",
+    },
+    {
+      label: "최근 납부일",
+      labelEn: "Last paid",
+      value: summary.lastPaidOn ?? "—",
+      sub: `${year}년 확정 납부 ${summary.paidCount}건`,
+      tone: "neutral",
     },
   ];
 
@@ -175,7 +255,138 @@ export async function MemberPortal({
           </Alert>
         )}
 
-        <StatGrid label={`${fiscalYear} 회계연도 내 회비 현황`} items={stats} />
+        <StatGrid label={`${year} 회계연도 내 납부 요약`} items={stats} />
+
+        {/* ── 통합 납부 내역 — 회비·행사비·기부를 한 표로 (05_거래 원본) ── */}
+        <Card>
+          <CardHeader
+            title="내 납부 내역 (회비 · 행사비 · 기부)"
+            description={
+              <>
+                공개 회계와 같은 원본(거래 원장)에서 그대로 가져온 {year}년 전체 내역입니다.
+                합계에는 <b>확정(장부반영)된 납부만</b> 넣습니다 — 미확정·무효 건은 표에 보이지만
+                합계에서 빠집니다.
+              </>
+            }
+            action={<Badge tone="neutral">{rows.length}건 전체 표시</Badge>}
+          />
+          <CardBody className="border-b border-line-soft">
+            <nav aria-label="회계연도 선택" className="flex flex-wrap items-center gap-2 no-print">
+              <span className="text-sm font-semibold text-ink-muted">회계연도</span>
+              {years.map((y) =>
+                y === year ? (
+                  <span
+                    key={y}
+                    aria-current="true"
+                    className="inline-flex min-h-10 items-center rounded-[var(--radius-pill)] border border-brand-300 bg-brand-50 px-3 text-sm font-semibold text-brand-800"
+                  >
+                    {y}년
+                  </span>
+                ) : (
+                  <Link
+                    key={y}
+                    href={`?year=${y}`}
+                    className="inline-flex min-h-10 items-center rounded-[var(--radius-pill)] border border-line bg-surface px-3 text-sm font-medium text-ink-soft hover:border-brand-300 hover:bg-brand-50"
+                  >
+                    {y}년
+                  </Link>
+                ),
+              )}
+            </nav>
+          </CardBody>
+          {rows.length === 0 ? (
+            <CardBody>
+              <EmptyState
+                icon="💳"
+                title={`${year}년에는 납부 기록이 없습니다`}
+                description="총무에게 회비·행사비·기부금을 납부하시면 영수증번호가 발급되고 이 자리에 표시됩니다."
+              />
+            </CardBody>
+          ) : (
+            <>
+              <TableCardBody label="내 납부 내역">
+                <Table caption={`${year}년 내 납부 내역 전체`} captionHidden>
+                  <THead>
+                    <TR>
+                      <TH>구분</TH>
+                      <TH>일자</TH>
+                      <TH>영수증번호</TH>
+                      <TH>항목 · 연결</TH>
+                      <TH numeric>금액</TH>
+                      <TH>수단</TH>
+                      <TH>상태</TH>
+                    </TR>
+                  </THead>
+                  <TBody>
+                    {rows.map((t) => {
+                      const links = linksByReceipt.get(t.receiptNo) ?? [];
+                      return (
+                        <TR key={t.receiptNo} tone={t.status === "VOIDED" ? "muted" : undefined}>
+                          <TD>
+                            <Badge tone={KIND_TONE[t.kind]}>{t.kind}</Badge>
+                          </TD>
+                          <TD>
+                            <time dateTime={t.date} className="tnum whitespace-nowrap">
+                              {t.date}
+                            </time>
+                          </TD>
+                          <TD className="tnum whitespace-nowrap text-sm text-ink-muted">
+                            {t.receiptNo}
+                          </TD>
+                          <TD>
+                            {t.categoryName}
+                            {links.length > 0 ? (
+                              <span className="block text-sm text-ink-muted">
+                                {links.join(" · ")}
+                              </span>
+                            ) : null}
+                            {t.memo ? (
+                              <span className="block text-sm text-ink-muted">{t.memo}</span>
+                            ) : null}
+                          </TD>
+                          <TD
+                            numeric
+                            className={t.status === "VOIDED" ? "line-through" : undefined}
+                          >
+                            {t.kind === "지급" ? `−${formatPeso(t.amountPhp)}` : formatPeso(t.amountPhp)}
+                          </TD>
+                          <TD>{t.method}</TD>
+                          <TD>
+                            <StatusBadge status={t.status} />
+                            {t.status === "VOIDED" && t.voidReason ? (
+                              <span className="mt-1 block text-sm text-ink-muted">
+                                {t.voidReason}
+                              </span>
+                            ) : null}
+                          </TD>
+                        </TR>
+                      );
+                    })}
+                  </TBody>
+                </Table>
+              </TableCardBody>
+              <CardBody className="border-t border-line-soft">
+                <p className="text-sm text-ink-muted">
+                  {year}년 확정 납부 합계 <b className="tnum">{formatPeso(summary.paidTotal)}</b>
+                  {subtotalText ? <> ({subtotalText})</> : null}
+                  {summary.draftCount > 0 ? (
+                    <>
+                      {" · "}미확정 <b>{summary.draftCount}건</b>은 증빙·확인이 끝나면 합계에
+                      들어갑니다
+                    </>
+                  ) : null}
+                  {summary.outCount > 0 ? (
+                    <>
+                      {" · "}지급(한인회 → 회원) <b>{summary.outCount}건</b>은 납부 합계에 넣지
+                      않습니다
+                    </>
+                  ) : null}
+                  . 공개 회계의 수입 집계와 같은 규칙으로 셉니다.
+                </p>
+              </CardBody>
+            </>
+          )}
+        </Card>
 
         {/* ── 회비 고지 ─────────────────────────────────────────────── */}
         <Card>
@@ -217,58 +428,6 @@ export async function MemberPortal({
                         </Badge>
                         {d.exemptReason ? (
                           <span className="mt-1 block text-sm text-ink-muted">{d.exemptReason}</span>
-                        ) : null}
-                      </TD>
-                    </TR>
-                  ))}
-                </TBody>
-              </Table>
-            </TableCardBody>
-          )}
-        </Card>
-
-        {/* ── 영수증 ────────────────────────────────────────────────── */}
-        <Card>
-          <CardHeader
-            title="내 영수증 · 납부 이력"
-            description={`최근 30건까지 보여 드립니다. 확인된 납부액 합계 ${formatPeso(paidTotal)}.`}
-          />
-          {member.counterpartyTxs.length === 0 ? (
-            <CardBody>
-              <EmptyState
-                icon="💳"
-                title="아직 납부 기록이 없습니다"
-                description="총무에게 회비를 납부하시면 영수증번호가 발급되고 이 자리에 표시됩니다."
-              />
-            </CardBody>
-          ) : (
-            <TableCardBody label="내 영수증 목록">
-              <Table caption="내 납부 이력" captionHidden>
-                <THead>
-                  <TR>
-                    <TH>영수증번호</TH>
-                    <TH>일자</TH>
-                    <TH>항목</TH>
-                    <TH numeric>금액</TH>
-                    <TH>수단</TH>
-                    <TH>상태</TH>
-                  </TR>
-                </THead>
-                <TBody>
-                  {member.counterpartyTxs.map((t) => (
-                    <TR key={t.receiptNo} tone={t.status === "VOIDED" ? "muted" : undefined}>
-                      <TD className="tnum">{t.receiptNo}</TD>
-                      <TD>{t.date}</TD>
-                      <TD>
-                        {t.category.publicName}
-                        {t.memo ? <span className="block text-sm text-ink-muted">{t.memo}</span> : null}
-                      </TD>
-                      <TD numeric>{formatPeso(t.amountPhp)}</TD>
-                      <TD>{t.method}</TD>
-                      <TD>
-                        <StatusBadge status={t.status} />
-                        {t.status === "VOIDED" && t.voidReason ? (
-                          <span className="mt-1 block text-sm text-ink-muted">{t.voidReason}</span>
                         ) : null}
                       </TD>
                     </TR>

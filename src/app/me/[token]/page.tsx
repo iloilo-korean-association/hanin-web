@@ -34,8 +34,16 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-export default async function MyPage({ params }: { params: Promise<{ token: string }> }) {
+export default async function MyPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ token: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { token } = await params;
+  const sp = await searchParams;
+  const year = Array.isArray(sp.year) ? sp.year[0] : sp.year;
 
   // 토큰 문자셋은 대문자뿐이다. 소문자로 옮겨 적으신 분도 들어올 수 있게 올려 준다.
   const normalized = decodeURIComponent(token).trim().toUpperCase();
@@ -83,7 +91,7 @@ export default async function MyPage({ params }: { params: Promise<{ token: stri
     <>
       {/* 링크로 열어도 세션을 함께 심는다 — 화면 렌더 중에는 쿠키를 못 쓰므로 클라이언트에서 1회 호출 */}
       <SessionBridge token={me.linkToken} />
-      <MemberPortal memberNo={me.memberNo} mode="token" />
+      <MemberPortal memberNo={me.memberNo} mode="token" year={year} />
     </>
   );
 }

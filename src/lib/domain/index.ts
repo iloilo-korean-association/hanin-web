@@ -15,5 +15,6 @@ export * from "./invariants";
 export * from "./conflict";
 export * from "./approval";
 export * from "./ledger";
+export * from "./memberPayments";
 export * from "./settings";
 export * from "./mail";

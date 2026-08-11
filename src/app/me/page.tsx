@@ -23,7 +23,14 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-export default async function MyHomePage() {
+export default async function MyHomePage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const sp = await searchParams;
+  const year = Array.isArray(sp.year) ? sp.year[0] : sp.year;
+
   let me;
   try {
     me = await requireMemberSession();
@@ -62,5 +69,5 @@ export default async function MyHomePage() {
   });
   if (cred?.mustChange) redirect(ROUTES.mePassword);
 
-  return <MemberPortal memberNo={me.memberNo} mode="session" />;
+  return <MemberPortal memberNo={me.memberNo} mode="session" year={year} />;
 }
