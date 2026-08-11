@@ -125,6 +125,7 @@ export default async function HomePage() {
             <LinkButton href={ROUTES.join} variant="primary">
               회원 가입
             </LinkButton>
+            <LinkButton href={ROUTES.login}>회원 로그인</LinkButton>
             <LinkButton href={ROUTES.about}>한인회 소개</LinkButton>
           </ButtonRow>
         }
@@ -314,6 +315,7 @@ export default async function HomePage() {
             <LinkButton href={ROUTES.join} variant="primary">
               회원 가입 신청
             </LinkButton>
+            <LinkButton href={ROUTES.login}>회원 로그인</LinkButton>
             <LinkButton href={ROUTES.donate}>기부하기</LinkButton>
             <LinkButton href={ROUTES.events}>행사 일정</LinkButton>
             <LinkButton href={ROUTES.biz}>업소 안내</LinkButton>

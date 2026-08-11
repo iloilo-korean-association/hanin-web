@@ -41,7 +41,7 @@ export default async function OfficerLoginPage() {
       <PageHeader
         title="임원 로그인"
         titleEn="Officer Sign in"
-        description="한인회 임원 전용 화면입니다. 회원 조회는 가입 안내 메일에 들어 있는 '내 정보' 링크를 이용하십시오."
+        description="한인회 임원 전용 화면입니다. 일반 회원은 회원 로그인(/login) 또는 가입 안내 메일의 '내 정보' 링크를 이용하십시오."
         breadcrumb={[{ href: ROUTES.home, label: "홈" }]}
       />
 

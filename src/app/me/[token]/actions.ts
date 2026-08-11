@@ -2,9 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 
+import { setMemberSession } from "@/lib/auth";
 import { prisma, type Tx } from "@/lib/db";
 import { phoneLast4 } from "@/lib/domain";
-import { isGuardError, requireMember } from "@/lib/guard";
+import { isGuardError, requireMember, requireMemberSession } from "@/lib/guard";
+import { ROUTES } from "@/lib/site";
 import { memberSelfUpdateSchema } from "@/lib/validators";
 
 import { boolOf, fail, textOf, zodFieldErrors, zodSummary, type FormResult } from "../../(public)/_shared";
@@ -45,9 +47,11 @@ export async function updateMyInfo(
 ): Promise<MeUpdateState> {
   const token = textOf(formData, "token");
 
+  // 본인 특정은 두 경로뿐이다: 링크토큰(기존) 또는 세션 쿠키(P1 비밀번호 로그인).
+  // 어느 쪽이든 폼에 실려 온 회원번호 따위는 쳐다보지 않는다.
   let me;
   try {
-    me = await requireMember(token.toUpperCase());
+    me = token ? await requireMember(token.toUpperCase()) : await requireMemberSession();
   } catch (e) {
     if (isGuardError(e)) return fail(e.message, e.howToFix);
     throw e;
@@ -133,8 +137,25 @@ export async function updateMyInfo(
   }
 
   revalidatePath(`/me/${me.linkToken}`);
+  revalidatePath(ROUTES.meHome);
 
   return { status: "ok", changed: diffs.map((d) => LABEL[d.field] ?? d.field) };
+}
+
+/**
+ * 매직링크로 들어온 회원에게 세션 쿠키를 심는다 (P1 — SessionBridge 가 1회 호출).
+ *
+ * ★ 첫 줄 가드: 토큰이 유효한 회원일 때만 세션이 나간다. 아무 문자열로 불러도
+ *   requireMember 가 던진다. 실패는 조용히 무시된다 — 토큰 화면은 세션 없이도 완전하다.
+ */
+export async function adoptSessionFromToken(token: string): Promise<void> {
+  let me;
+  try {
+    me = await requireMember(String(token ?? "").trim().toUpperCase());
+  } catch {
+    return; // 형식 오류·폐기 토큰 — 세션을 심지 않는다
+  }
+  await setMemberSession({ sub: me.memberNo, name: me.name });
 }
 
 function yn(v: boolean): string {

@@ -19,9 +19,10 @@ import {
   PUBLIC_LEDGER_PATH,
   renderFromSettings,
 } from "@/lib/domain";
+import { hashPassword } from "@/lib/auth";
 import { queueMail } from "@/lib/mail";
-import { absoluteUrl } from "@/lib/site";
-import { joinInputSchema } from "@/lib/validators";
+import { absoluteUrl, ROUTES } from "@/lib/site";
+import { joinInputSchema, joinPasswordSchema } from "@/lib/validators";
 
 import {
   boolOf,
@@ -138,6 +139,19 @@ export async function submitJoin(_prev: JoinState, formData: FormData): Promise<
   }
   const input = parsed.data;
 
+  /* ③-1 비밀번호 (P1) — 가입 즉시 회원번호(아이디)+비밀번호 로그인이 가능해야 한다.
+     joinInputSchema 와 별도로 parse 한다: 비밀번호 평문이 input 객체에 섞여
+     로그·직렬화 경로로 새는 것을 막기 위해서다. */
+  const pwParsed = joinPasswordSchema.safeParse({
+    password: String(formData.get("password") ?? ""),
+    passwordConfirm: String(formData.get("passwordConfirm") ?? ""),
+  });
+  if (!pwParsed.success) {
+    return fail(zodSummary(pwParsed.error), "빨간 글씨가 붙은 칸을 고쳐 주십시오.", zodFieldErrors(pwParsed.error));
+  }
+  // 해시는 트랜잭션 밖에서 미리 만든다 — bcrypt 는 느려서 트랜잭션을 붙잡으면 안 된다.
+  const passwordHash = await hashPassword(pwParsed.data.password);
+
   // 출생연도는 중복 검사 키다. 스키마에서는 선택이지만 가입 폼에서는 받는다.
   if (input.birthYear === undefined) {
     return fail("출생연도를 적어 주십시오.", "중복 가입을 막는 데 쓰입니다. 예: 1968", {
@@ -253,6 +267,12 @@ export async function submitJoin(_prev: JoinState, formData: FormData): Promise<
         },
       });
 
+      // P1: 가입 트랜잭션 안에서 비밀번호까지 함께 만든다.
+      // 회원은 생겼는데 비밀번호가 없는 어정쩡한 상태를 만들지 않는다.
+      await tx.memberCredential.create({
+        data: { memberNo, passwordHash, mustChange: false, updatedBy: "WEB" },
+      });
+
       return { memberNo, linkToken, invoiceId };
     });
   } catch (e) {
@@ -280,6 +300,8 @@ export async function submitJoin(_prev: JoinState, formData: FormData): Promise<
         // 메일 본문의 링크는 반드시 절대주소여야 한다. 메일 클라이언트에는
         // "현재 사이트" 가 없어서 /ledger 같은 상대경로는 눌리지 않는 죽은 링크가 된다.
         공개장부URL: absoluteUrl(PUBLIC_LEDGER_PATH),
+        // P1: 회원번호(아이디)+비밀번호 로그인 안내 (FALLBACK_TEMPLATES.환영 참조)
+        로그인URL: absoluteUrl(ROUTES.login),
       },
       FALLBACK_TEMPLATES.환영,
     );

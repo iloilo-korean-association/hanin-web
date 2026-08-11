@@ -200,6 +200,47 @@ export function JoinForm({
               </Field>
 
               <Field
+                htmlFor="password"
+                label="비밀번호"
+                labelEn="Password"
+                required
+                hint="8자 이상으로 정해 주십시오. 로그인 아이디는 가입 후 발급되는 회원번호(M0001 형식)입니다."
+                error={errOf(state, "password")}
+              >
+                <Input
+                  id="password"
+                  name="password"
+                  required
+                  type="password"
+                  autoComplete="new-password"
+                  minLength={8}
+                  maxLength={72}
+                  invalid={Boolean(errOf(state, "password"))}
+                  {...fieldAria("password", { hint: true, error: errOf(state, "password") })}
+                />
+              </Field>
+
+              <Field
+                htmlFor="passwordConfirm"
+                label="비밀번호 확인"
+                labelEn="Confirm password"
+                required
+                error={errOf(state, "passwordConfirm")}
+              >
+                <Input
+                  id="passwordConfirm"
+                  name="passwordConfirm"
+                  required
+                  type="password"
+                  autoComplete="new-password"
+                  minLength={8}
+                  maxLength={72}
+                  invalid={Boolean(errOf(state, "passwordConfirm"))}
+                  {...fieldAria("passwordConfirm", { error: errOf(state, "passwordConfirm") })}
+                />
+              </Field>
+
+              <Field
                 htmlFor="note"
                 label="남기실 말씀"
                 labelEn="Note"
@@ -284,7 +325,12 @@ function JoinSuccess({
     <div className="flex flex-col gap-5">
       <Alert tone="success" title={`${state.name}님, 가입 신청이 접수되었습니다.`}>
         <p>
-          회원번호는 <b>{state.memberNo}</b> 입니다.
+          회원번호는 <b>{state.memberNo}</b> 입니다. <b>이 번호가 로그인 아이디입니다</b> — 가입 시
+          정하신 비밀번호와 함께{" "}
+          <Link href={ROUTES.login} className="link-ika font-semibold">
+            회원 로그인
+          </Link>
+          에서 로그인하실 수 있습니다.
           {state.resubmitted ? " (이미 접수된 신청서입니다. 같은 내용이 두 번 저장되지는 않았습니다.)" : ""}
         </p>
       </Alert>
@@ -292,7 +338,7 @@ function JoinSuccess({
       <Card>
         <CardHeader
           title="본인 전용 조회 링크"
-          description="이 주소를 저장해 두십시오. 비밀번호 없이 이 링크만으로 회비 납부 내역과 영수증을 보실 수 있습니다."
+          description="이 주소를 저장해 두시면 비밀번호 없이도 회비 납부 내역과 영수증을 보실 수 있습니다. 비밀번호 로그인과 둘 다 쓰실 수 있습니다."
         />
         <CardBody>
           <div className="rounded-[var(--radius-field)] border border-brand-300 bg-brand-50 p-4">

@@ -12,7 +12,7 @@
  */
 import "server-only";
 
-import { readOfficerSession } from "@/lib/auth";
+import { readMemberSession, readOfficerSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { isValidMemberTokenFormat, parsePermissions, type OfficerPermission } from "@/lib/session";
 import { MONEY_PERMISSIONS } from "@/lib/validators";
@@ -374,6 +374,67 @@ export async function currentMember(token: string | undefined): Promise<MemberCo
   if (!token) return null;
   try {
     return await requireMember(token);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 세션 쿠키로 회원을 특정한다 (P1 — /login 비밀번호 로그인).
+ *
+ * 쿠키에는 신원(회원번호)만 있다. 상태·동의는 요청마다 01_회원을 다시 읽는다 —
+ * 탈퇴 처리되면 다음 요청부터 즉시 막혀야 하기 때문이다(README §9 원칙).
+ * 매직링크(requireMember)와 돌려주는 모양(MemberContext)이 같아서 화면은 구분하지 않는다.
+ */
+export async function requireMemberSession(): Promise<MemberContext> {
+  const session = await readMemberSession();
+  if (!session) {
+    throw new GuardError(
+      "UNAUTHENTICATED",
+      "회원 로그인이 필요합니다.",
+      401,
+      "회원 로그인 화면에서 회원번호(또는 이메일)와 비밀번호로 로그인해 주십시오.",
+    );
+  }
+
+  const row = await prisma.member.findUnique({
+    where: { memberNo: session.sub },
+    select: {
+      memberNo: true,
+      name: true,
+      email: true,
+      status: true,
+      rosterConsent: true,
+      notifyConsent: true,
+      linkToken: true,
+    },
+  });
+
+  if (!row) {
+    throw new GuardError(
+      "NO_MEMBER",
+      "회원 정보를 찾을 수 없습니다. 다시 로그인해 주십시오.",
+      403,
+      "총무에게 문의해 주십시오.",
+    );
+  }
+
+  if (row.status === "WITHDRAWN") {
+    throw new GuardError(
+      "MEMBER_INACTIVE",
+      "탈퇴 처리된 회원입니다.",
+      403,
+      "다시 가입하시려면 회원 가입 화면을 이용해 주십시오.",
+    );
+  }
+
+  return row;
+}
+
+/** 세션이 없거나 무효면 null. 화면 분기용. */
+export async function currentMemberSession(): Promise<MemberContext | null> {
+  try {
+    return await requireMemberSession();
   } catch {
     return null;
   }

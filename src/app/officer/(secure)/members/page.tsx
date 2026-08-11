@@ -33,8 +33,13 @@ import { isGuardError, requireOfficer } from "@/lib/guard";
 import { ROUTES } from "@/lib/site";
 import { MEMBER_STATUSES } from "@/lib/validators";
 
+import { ResetPasswordButton } from "./ResetPasswordButton";
+
 /**
- * 회원 리스트 — v1 은 **읽기 전용**이다. 편집 경로를 만들지 않았다(의도).
+ * 회원 리스트 — 명부는 **읽기 전용**이다. 회원 정보 편집 경로를 만들지 않았다(의도).
+ *
+ * P1 에서 딱 하나의 쓰기가 생겼다: **비밀번호 재설정**("회원관리" 권한, 임시 비밀번호 발급).
+ * 메일 재설정(Resend)이 보류인 동안 총무가 수동으로 발급하는 경로다.
  *
  * ★ 개인정보 화면이다. 실명·연락처·이메일이 그대로 보인다.
  *   임원 전용(조회권)이며, 공개 화면·공개 회계로 이 데이터가 새는 경로를 만들지 마라.
@@ -62,8 +67,9 @@ const STATUS_TONE: Record<string, BadgeTone> = {
 };
 
 export default async function MembersPage({ searchParams }: { searchParams: SP }) {
+  let me;
   try {
-    await requireOfficer({ permissions: ["조회권"], screen: "회원 명부" });
+    me = await requireOfficer({ permissions: ["조회권"], screen: "회원 명부" });
   } catch (e) {
     if (isGuardError(e)) {
       return (
@@ -118,6 +124,8 @@ export default async function MembersPage({ searchParams }: { searchParams: SP }
         joinedOn: true,
         rosterConsent: true,
         notifyConsent: true,
+        // P1: 로그인 비밀번호 상태. 해시는 절대 화면으로 가져오지 않는다.
+        credential: { select: { mustChange: true, lockedUntil: true } },
       },
     }),
     prisma.member.count({ where }),
@@ -126,6 +134,16 @@ export default async function MembersPage({ searchParams }: { searchParams: SP }
 
   const countOf = new Map(grouped.map((g) => [g.status, g._count._all]));
   const total = grouped.reduce((sum, g) => sum + g._count._all, 0);
+
+  // 재설정 버튼 활성 조건 — 서버 액션이 어차피 다시 검사하지만, 화면에서도 이유를 보여준다.
+  const canReset = me.can("회원관리") && !me.isAuditor;
+  const resetBlocked = me.isAuditor
+    ? "감사 계정은 읽기 전용입니다."
+    : me.can("회원관리")
+      ? undefined
+      : '"회원관리" 권한이 없습니다.';
+
+  const now = new Date();
 
   const stats: StatItem[] = [
     { label: "전체", value: `${total}명` },
@@ -140,7 +158,7 @@ export default async function MembersPage({ searchParams }: { searchParams: SP }
         title="회원"
         titleEn="Members"
         breadcrumb={[{ href: ROUTES.officer, label: "임원" }]}
-        description="회원 명부 열람 화면입니다. 이 화면에서는 고칠 수 없습니다 — 정정이 필요하면 총무에게 요청하십시오."
+        description="회원 명부 열람 화면입니다. 회원 정보는 이 화면에서 고칠 수 없습니다 — 정정이 필요하면 총무에게 요청하십시오. 비밀번호 재설정(회원관리 권한)만 가능합니다."
       />
 
       <Stack gap="md">
@@ -226,38 +244,69 @@ export default async function MembersPage({ searchParams }: { searchParams: SP }
                     <TH>이메일</TH>
                     <TH>가입일</TH>
                     <TH>동의</TH>
+                    <TH>비밀번호</TH>
+                    <TH>
+                      <span className="sr-only">작업</span>
+                    </TH>
                   </TR>
                 </THead>
                 <TBody>
-                  {rows.map((m) => (
-                    <TR key={m.memberNo} tone={m.status === "WITHDRAWN" ? "muted" : undefined}>
-                      <TD className="font-mono text-sm">{m.memberNo}</TD>
-                      <TD className="font-medium">{m.name}</TD>
-                      <TD>{m.memberType}</TD>
-                      <TD>
-                        <Badge tone={STATUS_TONE[m.status] ?? "neutral"}>{m.status}</Badge>
-                      </TD>
-                      <TD>{m.duesGrade}</TD>
-                      <TD>{m.region || "—"}</TD>
-                      <TD className="tnum whitespace-nowrap">{m.phone || "—"}</TD>
-                      <TD className="break-all text-sm">{m.email || "—"}</TD>
-                      <TD className="tnum whitespace-nowrap">{m.joinedOn}</TD>
-                      <TD>
-                        <span className="flex flex-wrap gap-1">
-                          {m.rosterConsent ? (
-                            <Badge tone="success">명부공개</Badge>
+                  {rows.map((m) => {
+                    const locked = Boolean(m.credential?.lockedUntil && m.credential.lockedUntil > now);
+                    return (
+                      <TR key={m.memberNo} tone={m.status === "WITHDRAWN" ? "muted" : undefined}>
+                        <TD className="font-mono text-sm">{m.memberNo}</TD>
+                        <TD className="font-medium">{m.name}</TD>
+                        <TD>{m.memberType}</TD>
+                        <TD>
+                          <Badge tone={STATUS_TONE[m.status] ?? "neutral"}>{m.status}</Badge>
+                        </TD>
+                        <TD>{m.duesGrade}</TD>
+                        <TD>{m.region || "—"}</TD>
+                        <TD className="tnum whitespace-nowrap">{m.phone || "—"}</TD>
+                        <TD className="break-all text-sm">{m.email || "—"}</TD>
+                        <TD className="tnum whitespace-nowrap">{m.joinedOn}</TD>
+                        <TD>
+                          <span className="flex flex-wrap gap-1">
+                            {m.rosterConsent ? (
+                              <Badge tone="success">명부공개</Badge>
+                            ) : (
+                              <Badge tone="neutral">명부비공개</Badge>
+                            )}
+                            {m.notifyConsent ? (
+                              <Badge tone="info">알림수신</Badge>
+                            ) : (
+                              <Badge tone="warn">알림거부</Badge>
+                            )}
+                          </span>
+                        </TD>
+                        <TD>
+                          <span className="flex flex-wrap gap-1">
+                            {!m.credential ? (
+                              <Badge tone="neutral">미설정</Badge>
+                            ) : m.credential.mustChange ? (
+                              <Badge tone="warn">임시</Badge>
+                            ) : (
+                              <Badge tone="success">설정됨</Badge>
+                            )}
+                            {locked ? <Badge tone="danger">잠김</Badge> : null}
+                          </span>
+                        </TD>
+                        <TD>
+                          {m.status !== "WITHDRAWN" ? (
+                            <ResetPasswordButton
+                              memberNo={m.memberNo}
+                              memberName={m.name}
+                              disabled={!canReset}
+                              disabledReason={resetBlocked}
+                            />
                           ) : (
-                            <Badge tone="neutral">명부비공개</Badge>
+                            <span className="text-sm text-ink-muted">—</span>
                           )}
-                          {m.notifyConsent ? (
-                            <Badge tone="info">알림수신</Badge>
-                          ) : (
-                            <Badge tone="warn">알림거부</Badge>
-                          )}
-                        </span>
-                      </TD>
-                    </TR>
-                  ))}
+                        </TD>
+                      </TR>
+                    );
+                  })}
                 </TBody>
               </Table>
             </TableCardBody>

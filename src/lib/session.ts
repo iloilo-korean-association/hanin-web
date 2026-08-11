@@ -22,6 +22,16 @@ export const OFFICER_COOKIE = "ika_officer";
  */
 export const SESSION_MAX_AGE = 60 * 60 * 8;
 
+/** 회원 세션 쿠키 이름. 임원 쿠키와 반드시 별도다 — 같은 브라우저에서 둘 다 유지된다. */
+export const MEMBER_COOKIE = "ika_member";
+
+/**
+ * 회원 세션 수명 14일.
+ * 임원(8시간)보다 긴 이유: 회원 화면은 본인 조회 전용이고 쓰기라고는 본인 연락처
+ * 수정뿐이다. 기존 매직링크(/me/[token])는 아예 만료가 없으므로 14일은 더 좁힌 것이다.
+ */
+export const MEMBER_SESSION_MAX_AGE = 60 * 60 * 24 * 14;
+
 /**
  * 12_임원.권한 에 들어가는 값. 이 3개가 전부다.
  * 정의는 validators/enums.ts 한 곳에만 둔다 — 두 군데에 적으면 반드시 어긋난다.
@@ -91,6 +101,49 @@ export async function verifyOfficerSession(
       email: String(payload.email ?? ""),
       name: String(payload.name ?? ""),
     };
+  } catch {
+    return null;
+  }
+}
+
+/* ─────────────────────────── 회원 세션 ─────────────────────────── */
+
+/**
+ * 회원 세션 쿠키에 담기는 내용. **신원만.**
+ * 회비 상태·회원구분 같은 것을 넣지 않는다 — 넣으면 상태가 바뀌어도 쿠키가
+ * 만료될 때까지 옛 값이 살아 있다. 화면이 요청마다 01_회원을 다시 읽는다.
+ */
+export interface MemberSessionPayload {
+  /** 01_회원.회원번호 (M0001) */
+  sub: string;
+  /** 화면 인사말용. 판정에 쓰지 마라. */
+  name: string;
+}
+
+/**
+ * aud 클레임으로 임원 토큰과 구분한다.
+ * 같은 SESSION_SECRET 으로 서명하므로, aud 검사가 없으면 회원 토큰을
+ * ika_officer 쿠키에 옮겨 심는 혼용 시도가 서명 검증을 통과해 버린다.
+ * (임원 조회는 officerId 로 하니 실패하겠지만, 계층 구분은 토큰 자체에 둔다.)
+ */
+const MEMBER_AUDIENCE = "ika-member";
+
+export async function signMemberSession(payload: MemberSessionPayload): Promise<string> {
+  return new SignJWT({ name: payload.name })
+    .setProtectedHeader({ alg: "HS256" })
+    .setSubject(payload.sub)
+    .setAudience(MEMBER_AUDIENCE)
+    .setIssuedAt()
+    .setExpirationTime(`${MEMBER_SESSION_MAX_AGE}s`)
+    .sign(getSecret());
+}
+
+/** 검증 실패(변조·만료·서명불일치·임원 토큰 혼용)는 예외가 아니라 null 이다. */
+export async function verifyMemberSession(token: string): Promise<MemberSessionPayload | null> {
+  try {
+    const { payload } = await jwtVerify(token, getSecret(), { audience: MEMBER_AUDIENCE });
+    if (!payload.sub) return null;
+    return { sub: String(payload.sub), name: String(payload.name ?? "") };
   } catch {
     return null;
   }

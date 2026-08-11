@@ -569,9 +569,10 @@ async function main(): Promise<void> {
   /* ── 3-5. 임원 5 ─────────────────────────────────────────────────── */
   const officers = [
     // 서비스관리: 공개 서비스 안내(/services)의 편집 권한. 회장·총무에게 준다.
-    { officerId: "OF01", memberNo: "M0001", role: "회장", email: EMAIL.president, permissions: "승인권,조회권,서비스관리", approvalLimit: 30_000, note: "이해상충 7건 신고 — 관련 안건 회피(recusal)" },
+    // 회원관리(P1): 회원 비밀번호 재설정(임시 비밀번호 발급). 회장·총무에게 준다.
+    { officerId: "OF01", memberNo: "M0001", role: "회장", email: EMAIL.president, permissions: "승인권,조회권,서비스관리,회원관리", approvalLimit: 30_000, note: "이해상충 7건 신고 — 관련 안건 회피(recusal)" },
     { officerId: "OF02", memberNo: "M0002", role: "부회장", email: EMAIL.vp, permissions: "승인권,조회권", approvalLimit: 10_000, note: "회장 회피 시 1차 승인 대행" },
-    { officerId: "OF03", memberNo: "M0003", role: "총무", email: EMAIL.treasurer, permissions: "입력권,조회권,서비스관리", approvalLimit: 3_000, note: "이해상충 1건 신고 (배우자 케이터링)" },
+    { officerId: "OF03", memberNo: "M0003", role: "총무", email: EMAIL.treasurer, permissions: "입력권,조회권,서비스관리,회원관리", approvalLimit: 3_000, note: "이해상충 1건 신고 (배우자 케이터링)" },
     { officerId: "OF04", memberNo: "M0004", role: "감사", email: EMAIL.auditor1, permissions: "조회권", approvalLimit: 0, note: "감사는 입력·승인권 없음" },
     { officerId: "OF05", memberNo: "M0005", role: "감사", email: EMAIL.auditor2, permissions: "승인권,조회권", approvalLimit: 50_000, note: "이사회 2차 승인 담당 감사" },
   ];

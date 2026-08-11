@@ -20,7 +20,7 @@ export default function robots(): MetadataRoute.Robots {
         userAgent: "*",
         allow: "/",
         disallow: [
-          "/me/", // 회원 매직링크 — 토큰이 색인되면 남이 열 수 있다
+          "/me", // 회원 화면 — 세션 홈(/me)과 매직링크(/me/<토큰>) 둘 다. 토큰이 색인되면 남이 열 수 있다
           "/officer", // 임원 화면
           "/dev", // 개발용 화면(빠른 로그인·아웃박스)
           "/api/", // Route Handler

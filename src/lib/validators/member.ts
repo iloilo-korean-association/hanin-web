@@ -70,6 +70,45 @@ export const memberSelfUpdateSchema = z.object({
 });
 export type MemberSelfUpdate = z.infer<typeof memberSelfUpdateSchema>;
 
+/* ── 회원 비밀번호 (P1) ────────────────────────────────────────────────── */
+
+/**
+ * 비밀번호 규칙 — 8자 이상.
+ * 상한 72자는 bcrypt 가 72바이트 이후를 조용히 잘라 버리기 때문이다(초과분은 검증에 안 쓰인다).
+ * 복잡도 규칙(특수문자 강제 등)은 두지 않는다 — 60대 회원이 대상이고,
+ * 길이 제한 + 5회 잠금이 실질 방어다.
+ */
+export const zMemberPassword = z
+  .string()
+  .min(8, "비밀번호는 8자 이상으로 정해 주십시오.")
+  .max(72, "비밀번호는 72자 이내로 정해 주십시오.");
+
+/** 가입 폼의 비밀번호 쌍. joinInputSchema 와 별도로 parse 한다(기존 소비처 불변). */
+export const joinPasswordSchema = z
+  .object({
+    password: zMemberPassword,
+    passwordConfirm: z.string(),
+  })
+  .refine((d) => d.password === d.passwordConfirm, {
+    path: ["passwordConfirm"],
+    message: "비밀번호 확인이 일치하지 않습니다. 같은 값을 두 번 입력해 주십시오.",
+  });
+export type JoinPasswordInput = z.infer<typeof joinPasswordSchema>;
+
+/** 로그인한 회원 본인의 비밀번호 변경 (/me/password). */
+export const memberPasswordChangeSchema = z
+  .object({
+    /** 임시 비밀번호로 들어온 경우에도 "지금 로그인에 쓴 그 비밀번호" 를 다시 받는다. */
+    currentPassword: z.string().min(1, "현재 비밀번호를 입력해 주십시오."),
+    newPassword: zMemberPassword,
+    newPasswordConfirm: z.string(),
+  })
+  .refine((d) => d.newPassword === d.newPasswordConfirm, {
+    path: ["newPasswordConfirm"],
+    message: "새 비밀번호 확인이 일치하지 않습니다.",
+  });
+export type MemberPasswordChangeInput = z.infer<typeof memberPasswordChangeSchema>;
+
 /** 링크 토큰 — /me/[token]. 헷갈리는 글자(0 O 1 I L)는 애초에 생성하지 않는다. */
 export const zLinkToken = z
   .string()

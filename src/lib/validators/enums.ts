@@ -172,6 +172,7 @@ export const PERMISSIONS = [
   "행사관리", // 09_행사 등록·수정·마감
   "서비스관리", // 한인회 서비스 안내 등록·수정. 공개 페이지(/services)에 그대로 나간다
   "연락처관리", // 긴급 연락처 등록·수정. 사람 목숨이 걸린 자료다
+  "회원관리", // 회원 비밀번호 재설정(임시 비밀번호 발급). 메일 재설정 보류 기간의 수동 대체 경로다
   /**
    * ★ 메타 권한 — 다른 임원의 권한을 주고 뺏는다.
    *   이걸 가진 사람은 스스로에게 모든 권한을 줄 수 있으므로, 사실상 최상위다.
@@ -187,7 +188,7 @@ export type Permission = (typeof PERMISSIONS)[number];
 /** 돈을 움직이는 권한. 화면 분류·설명에 쓴다. */
 export const MONEY_PERMISSIONS = ["승인권", "조회권", "입력권"] as const;
 /** 자료를 관리하는 권한. 관리자가 임원에게 위임할 수 있는 것들이다. */
-export const ADMIN_PERMISSIONS = ["업소관리", "행사관리", "서비스관리", "연락처관리", "임원관리"] as const;
+export const ADMIN_PERMISSIONS = ["업소관리", "행사관리", "서비스관리", "연락처관리", "회원관리", "임원관리"] as const;
 
 /** 권한별 한 줄 설명. 위임 화면에서 그대로 보여준다. */
 export const PERMISSION_HELP: Record<Permission, string> = {
@@ -198,6 +199,8 @@ export const PERMISSION_HELP: Record<Permission, string> = {
   행사관리: "행사를 등록·수정하고 신청을 마감합니다.",
   서비스관리: "한인회 서비스 안내를 등록·수정합니다. 공개 페이지(/services)에 그대로 나갑니다.",
   연락처관리: "긴급 연락처를 등록·수정합니다. 출처와 검증등급을 반드시 남겨야 합니다.",
+  회원관리:
+    "회원 비밀번호를 재설정해 임시 비밀번호를 발급합니다. 임시 비밀번호는 화면에 한 번만 표시되며 모든 발급이 감사로그에 남습니다.",
   임원관리: "다른 임원의 권한과 승인한도를 바꿉니다. 본인 것은 못 바꿉니다.",
 };
 
@@ -280,7 +283,13 @@ export const zMatchStatus = z.enum(MATCH_STATUSES);
 export const FY_STATUSES = ["OPEN", "CLOSED"] as const;
 export const zFyStatus = z.enum(FY_STATUSES);
 
-export const MAGIC_PURPOSES = ["OFFICER_LOGIN", "MEMBER_LINK"] as const;
+/**
+ * PASSWORD_RESET 은 P1 시점에는 **정의만** 있다 (휴면 준비).
+ * Resend(실발송)·도메인이 보류라 재설정 메일을 보낼 수 없기 때문이다 —
+ * 그동안은 총무가 임원 화면에서 임시 비밀번호를 수동 발급한다.
+ * 키가 생기면 이 purpose 로 매직링크를 발급하는 재설정 흐름을 붙인다.
+ */
+export const MAGIC_PURPOSES = ["OFFICER_LOGIN", "MEMBER_LINK", "PASSWORD_RESET"] as const;
 export const zMagicPurpose = z.enum(MAGIC_PURPOSES);
 export type MagicPurpose = (typeof MAGIC_PURPOSES)[number];
 

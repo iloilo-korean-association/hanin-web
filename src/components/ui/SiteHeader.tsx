@@ -58,6 +58,14 @@ export function SiteHeader() {
             ))}
             <li>
               <Link
+                href={ROUTES.login}
+                className="ml-1 inline-flex min-h-touch items-center rounded-[var(--radius-field)] border border-brand-300 px-3 text-sm font-semibold text-brand-800 hover:bg-brand-50"
+              >
+                회원 로그인
+              </Link>
+            </li>
+            <li>
+              <Link
                 href={ROUTES.officerLogin}
                 className="ml-1 inline-flex min-h-touch items-center rounded-[var(--radius-field)] border border-line-strong px-3 text-sm font-semibold text-ink-muted hover:border-brand-300 hover:text-brand-800"
               >
@@ -103,6 +111,14 @@ export function SiteHeader() {
                 </li>
               ))}
               <li className="mt-1 border-t border-line-soft pt-1">
+                <Link
+                  href={ROUTES.login}
+                  className="flex min-h-touch items-center rounded-[var(--radius-field)] px-3 text-sm font-semibold text-brand-800 hover:bg-brand-50"
+                >
+                  회원 로그인
+                </Link>
+              </li>
+              <li>
                 <Link
                   href={ROUTES.officerLogin}
                   className="flex min-h-touch items-center rounded-[var(--radius-field)] px-3 text-sm font-semibold text-ink-muted hover:bg-brand-50"

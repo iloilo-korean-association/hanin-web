@@ -31,8 +31,10 @@ export const EMERGENCY_NUMBER = "911";
 /**
  * 라우트 규약 (모든 화면 담당자가 이 표를 따른다)
  *
- *   공개(인증 없음)   /, /ledger, /biz, /services, /sos, /join, /donate, /events, /help
+ *   공개(인증 없음)   /, /ledger, /biz, /services, /sos, /join, /donate, /events, /help,
+ *                     /login, /login/forgot
  *   회원(매직링크)    /me/[token]
+ *   회원(세션쿠키)    /me, /me/password        ← P1 비밀번호 로그인
  *   임원(세션쿠키)    /officer, /officer/login, /officer/receipt,
  *                     /officer/expense, /officer/approve, /officer/audit
  *   개발 전용         /dev/login, /dev/outbox        ← 프로덕션에서 404
@@ -49,6 +51,11 @@ export const ROUTES = {
   events: "/events",
   help: "/help",
   me: (token: string) => `/me/${encodeURIComponent(token)}`,
+  /** 세션 기반 회원 홈. 매직링크 화면(/me/[token])과 같은 내용을 그린다. */
+  meHome: "/me",
+  mePassword: "/me/password",
+  login: "/login",
+  loginForgot: "/login/forgot",
   officer: "/officer",
   officerLogin: "/officer/login",
   devLogin: "/dev/login",
@@ -153,4 +160,5 @@ export const PUBLIC_PAGES: PublicNavItem[] = [
 ];
 
 /** 검색엔진·크롤러에서 막을 경로. robots.ts 와 next.config.ts 헤더가 함께 쓴다. */
-export const PRIVATE_PATH_PREFIXES = ["/me/", "/officer", "/dev", "/api"] as const;
+// "/me" 는 슬래시 없이 — 세션 기반 /me (P1) 와 매직링크 /me/<토큰> 둘 다 걸린다.
+export const PRIVATE_PATH_PREFIXES = ["/me", "/officer", "/dev", "/api"] as const;

@@ -99,6 +99,7 @@ model Member {
   counterpartyTxs Transaction[]        @relation("TxCounterparty") // 05_거래 상대방회원번호
   magicLinks      MagicLink[]
   outboxMails     OutboxMail[]
+  credential      MemberCredential? // [추가] 회원 비밀번호 (P1). 01_회원 23열은 건드리지 않았다
 
   @@index([status])
   @@index([duesGrade])
@@ -756,6 +757,27 @@ model OfficerCredential {
   updatedAt    DateTime @updatedAt
 
   officer Officer @relation(fields: [officerId], references: [officerId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// [추가] 회원 비밀번호 — P1 "아이디(회원번호) + 비밀번호" 로그인 (대표 결정 2026-08-11).
+// OfficerCredential 과 같은 분리 원칙: 01_회원 23열은 그대로 두고 해시만 별도 표에 둔다.
+//
+// · mustChange   — 총무가 발급한 임시 비밀번호로 로그인하면 즉시 변경을 강제한다.
+// · failedCount  — 연속 실패 횟수. 성공하면 0 으로 돌아간다.
+// · lockedUntil  — 5회 연속 실패 시 30분 잠금. 판정은 전부 서버(auth.ts)가 한다.
+// · updatedBy    — 마지막으로 해시를 바꾼 주체 (본인 memberNo / 임원 이메일 / WEB).
+// ─────────────────────────────────────────────────────────────────────────────
+model MemberCredential {
+  memberNo     String    @id // 회원번호 (M0001) — Member 1:1
+  passwordHash String // bcrypt 해시. 평문·임시비번은 어디에도 저장하지 않는다
+  mustChange   Boolean   @default(false) // 임시 비밀번호 여부 — true 면 로그인 직후 변경 강제
+  failedCount  Int       @default(0) // 연속 로그인 실패 횟수
+  lockedUntil  DateTime? // 이 시각까지 로그인 거부. null = 잠금 없음
+  updatedAt    DateTime  @updatedAt
+  updatedBy    String    @default("SYSTEM") // 마지막 변경 주체
+
+  member Member @relation(fields: [memberNo], references: [memberNo])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
