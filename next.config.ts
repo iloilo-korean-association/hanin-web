@@ -34,7 +34,20 @@ const nextConfig: NextConfig = {
     // 경로 패턴은 세그먼트 단위로 따로 적는다. 하나의 정규식으로 묶으면
     // path-to-regexp 가 여러 세그먼트를 못 잡아서 /dev/outbox 같은 하위 경로가 샌다.
     // (실제로 새는 것을 curl 로 확인하고 이렇게 바꿨다.)
-    const privatePaths = ["/me", "/me/:path*", "/officer", "/officer/:path*", "/dev", "/dev/:path*"];
+    // /verify/<토큰> 은 로그인 없이 열리지만 여기 포함시킨다 (P3):
+    //   · noindex  — 토큰이 검색결과에 뜨면 카드를 못 본 사람도 회원증을 열 수 있다
+    //   · no-store — 회원증 유효/무효는 렌더 시점 판정이다. 캐시되면 미납 전환이 안 보인다
+    //   · no-referrer — 이 페이지에서 밖으로 나가는 링크에 토큰이 실려 나가면 안 된다
+    const privatePaths = [
+      "/me",
+      "/me/:path*",
+      "/officer",
+      "/officer/:path*",
+      "/dev",
+      "/dev/:path*",
+      "/verify",
+      "/verify/:path*",
+    ];
 
     // ★ 순서가 의미를 갖는다. 여러 규칙이 같은 경로에 걸리면 **나중 규칙이 이긴다.**
     //   전역 기본값을 먼저 깔고, 비공개 경로 규칙을 뒤에 둬서 덮어쓰게 한다.

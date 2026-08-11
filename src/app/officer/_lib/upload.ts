@@ -39,10 +39,10 @@
 import "server-only";
 
 import { randomBytes } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { put } from "@vercel/blob";
+import { del, put } from "@vercel/blob";
 
 /** dataURL 문자 수 상한. 서버 액션 body 1MB 안에서 여유를 둔 값. */
 const MAX_DATAURL_CHARS = 780_000;
@@ -181,4 +181,55 @@ export async function saveDataUrl(
   dateStr: string,
 ): Promise<SaveResult> {
   return saveDataUrlTo(`uploads/${folder}`, dataUrl, dateStr);
+}
+
+/**
+ * 저장된 파일 1건을 지운다 (P3).
+ *
+ * ── 왜 필요한가 ─────────────────────────────────────────────────────────
+ *  회원 사진은 **지울 수 있어야 하는** 개인정보다. 필리핀 DPA(RA 10173) 상
+ *  목적이 끝나면(탈퇴·동의 철회) 보관할 근거가 없다. 재업로드로 밀려난 옛 사진도
+ *  같다 — 남겨 둘 이유가 없는 얼굴 사진이다.
+ *  ★ 증빙(영수증·견적서)에는 쓰지 마라. 05_거래는 I1(행 삭제 금지)이 걸린 장부이고
+ *    증빙을 지우면 그 거래는 근거를 잃는다.
+ *
+ * ── 절대 던지지 않는다 ──────────────────────────────────────────────────
+ *  파일이 이미 없거나 네트워크가 죽어도 호출부(사진 교체·탈퇴 처리)를 실패시키면
+ *  안 된다. "DB 는 바뀌었는데 액션은 실패로 보인다" 가 훨씬 나쁜 상태다.
+ *  실패는 ok:false 로 돌려주고, 호출부는 로그만 남기고 진행한다.
+ */
+export async function deleteStoredFile(url: string): Promise<{ ok: boolean; message: string }> {
+  const raw = String(url ?? "").trim();
+  if (!raw) return { ok: true, message: "지울 파일이 없습니다." };
+
+  /* ── Vercel Blob ── */
+  if (/^https?:\/\//i.test(raw)) {
+    if (!blobEnabled()) {
+      return { ok: false, message: "BLOB_READ_WRITE_TOKEN 이 없어 원격 파일을 지울 수 없습니다." };
+    }
+    try {
+      await del(raw, { token: process.env.BLOB_READ_WRITE_TOKEN });
+      return { ok: true, message: "저장소에서 삭제했습니다." };
+    } catch (e) {
+      return { ok: false, message: e instanceof Error ? e.message : String(e) };
+    }
+  }
+
+  /* ── 로컬 폴백 ── */
+  // 저장할 때 만든 형태(`/<prefix>/<날짜>_<난수>.<확장자>`)만 받는다.
+  // 임의 경로를 넣어 public/ 밖 파일을 지우는 길을 문법상 막는다.
+  if (!/^\/[a-z0-9-]+(\/[a-z0-9-]+)*\/[0-9-]+_[0-9a-f]+\.[a-z]+$/.test(raw)) {
+    return { ok: false, message: `저장소가 만든 경로 형태가 아닙니다: ${raw}` };
+  }
+  const abs = path.join(process.cwd(), "public", ...raw.replace(/^\//, "").split("/"));
+  const root = path.join(process.cwd(), "public");
+  if (!abs.startsWith(root + path.sep)) {
+    return { ok: false, message: "public 폴더 밖의 경로입니다." };
+  }
+  try {
+    await unlink(abs);
+    return { ok: true, message: "로컬 파일을 삭제했습니다." };
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : String(e) };
+  }
 }

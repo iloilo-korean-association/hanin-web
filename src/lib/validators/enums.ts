@@ -130,6 +130,17 @@ export const SERVICE_STATUSES = ["운영중", "준비", "중단"] as const;
 export const zServiceStatus = z.enum(SERVICE_STATUSES);
 export type ServiceStatus = (typeof SERVICE_STATUSES)[number];
 
+/* ── [추가] 회원 사진 · 디지털 회원증 (P3) ─────────────────────────────── */
+
+/**
+ * 사진 검수 상태.
+ * 올리면 '대기' → 총무가 '승인' 또는 '반려'(사유 필수).
+ * 회원증은 '승인' + 당해연도 회비 납부일 때만 발급된다(domain/memberCard.ts).
+ */
+export const MEMBER_PHOTO_STATUSES = ["대기", "승인", "반려"] as const;
+export const zMemberPhotoStatus = z.enum(MEMBER_PHOTO_STATUSES);
+export type MemberPhotoStatus = (typeof MEMBER_PHOTO_STATUSES)[number];
+
 /* ── 11_승인 ───────────────────────────────────────────────────────────── */
 
 export const APPROVAL_KINDS = ["지출", "기금이체", "예산변경", "무효처리"] as const;

@@ -34,9 +34,12 @@ export const EMERGENCY_NUMBER = "911";
  *   공개(인증 없음)   /, /ledger, /biz, /services, /sos, /join, /donate, /events, /help,
  *                     /login, /login/forgot
  *   회원(매직링크)    /me/[token]
- *   회원(세션쿠키)    /me, /me/password        ← P1 비밀번호 로그인
+ *   회원(세션쿠키)    /me, /me/password, /me/card   ← P1 비밀번호 로그인 · P3 회원증
  *   임원(세션쿠키)    /officer, /officer/login, /officer/receipt,
- *                     /officer/expense, /officer/approve, /officer/audit
+ *                     /officer/expense, /officer/approve, /officer/audit,
+ *                     /officer/members, /officer/members/photos
+ *   준공개(토큰)      /verify/[token]   ← P3 회원증 진위 확인. 로그인은 없지만
+ *                                          토큰을 아는 사람만 열 수 있고 noindex 다
  *   개발 전용         /dev/login, /dev/outbox        ← 프로덕션에서 404
  */
 export const ROUTES = {
@@ -54,6 +57,10 @@ export const ROUTES = {
   /** 세션 기반 회원 홈. 매직링크 화면(/me/[token])과 같은 내용을 그린다. */
   meHome: "/me",
   mePassword: "/me/password",
+  /** 디지털 회원증 (P3). 인쇄용 단독 화면 */
+  meCard: "/me/card",
+  /** 회원증 진위 확인 (P3). QR 이 가리키는 공개 주소 — 회원번호가 아니라 난수 토큰이다 */
+  verify: (verifyToken: string) => `/verify/${encodeURIComponent(verifyToken)}`,
   login: "/login",
   loginForgot: "/login/forgot",
   officer: "/officer",
@@ -161,4 +168,7 @@ export const PUBLIC_PAGES: PublicNavItem[] = [
 
 /** 검색엔진·크롤러에서 막을 경로. robots.ts 와 next.config.ts 헤더가 함께 쓴다. */
 // "/me" 는 슬래시 없이 — 세션 기반 /me (P1) 와 매직링크 /me/<토큰> 둘 다 걸린다.
-export const PRIVATE_PATH_PREFIXES = ["/me", "/officer", "/dev", "/api"] as const;
+// "/verify" 는 로그인 없이 열리지만 **색인되면 안 된다** (P3):
+//   토큰이 검색결과에 뜨면 카드를 본 적 없는 사람도 그 회원증을 열어 볼 수 있고,
+//   Referer 로 새어 나가면 링크를 받은 쪽이 토큰을 갖게 된다.
+export const PRIVATE_PATH_PREFIXES = ["/me", "/officer", "/dev", "/api", "/verify"] as const;

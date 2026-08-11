@@ -24,6 +24,7 @@ export default function robots(): MetadataRoute.Robots {
           "/officer", // 임원 화면
           "/dev", // 개발용 화면(빠른 로그인·아웃박스)
           "/api/", // Route Handler
+          "/verify", // 회원증 진위확인 — 카드를 직접 본 사람만 열어야 한다(색인되면 토큰이 공개된다)
         ],
       },
     ],

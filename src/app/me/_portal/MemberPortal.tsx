@@ -42,6 +42,9 @@ import { ROUTES } from "@/lib/site";
 
 import { memberLogoutAction } from "../../(public)/login/actions";
 import { ProfileForm } from "../[token]/ProfileForm";
+import { loadMemberCardData } from "./card-data";
+import { MemberIdCard } from "./MemberIdCard";
+import { PhotoUploadForm } from "./PhotoUploadForm";
 
 /**
  * 회원 포털 본문 — 매직링크(/me/[token])와 세션 로그인(/me)이 **같은 화면**을 그린다.
@@ -169,6 +172,10 @@ export async function MemberPortal({
     ]),
   );
 
+  /* ── 사진 · 디지털 회원증 (P3) ──
+        유효 판정은 여기서 하지 않는다. domain/memberCard.ts 가 정한 결과를 받아 그린다. */
+  const cardData = await loadMemberCardData(memberNo);
+
   const selectedInvoice = member.duesInvoices.find((d) => d.fiscalYear === year) ?? null;
   const subtotalText = PAYMENT_KINDS_IN.filter((k) => summary.byKind[k] > 0)
     .map((k) => `${k} ${formatPeso(summary.byKind[k])}`)
@@ -256,6 +263,73 @@ export async function MemberPortal({
         )}
 
         <StatGrid label={`${year} 회계연도 내 납부 요약`} items={stats} />
+
+        {/* ── 디지털 회원증 (P3) ─────────────────────────────────────
+              발급 조건: 사진 승인 + 당해연도 회비 납부 (대표 확정 2026-08-11).
+              못 갖춘 것이 있으면 카드 대신 "무엇이 남았는가" 를 보여 준다 —
+              "회원증이 없습니다" 만 띄우면 회원은 총무에게 전화한다. */}
+        <Card>
+          <CardHeader
+            title="디지털 회원증"
+            description={`${cardData.fiscalYear}년 회비를 납부하시고 사진이 승인되면 발급됩니다. 제휴 업소에 제시하실 수 있습니다.`}
+            action={
+              cardData.verdict.valid ? (
+                <LinkButton href={ROUTES.meCard} size="sm">
+                  크게 보기 · 인쇄
+                </LinkButton>
+              ) : (
+                <Badge tone="neutral">미발급</Badge>
+              )
+            }
+          />
+          <CardBody>
+            {cardData.verdict.valid ? (
+              <div className="flex flex-col gap-3">
+                <MemberIdCard
+                  name={cardData.member.name}
+                  memberNo={cardData.member.memberNo}
+                  memberType={cardData.member.memberType}
+                  fiscalYear={cardData.fiscalYear}
+                  photoViewUrl={cardData.photoViewUrl}
+                  verifyUrl={cardData.verifyUrl}
+                />
+                <p className="text-sm text-ink-muted">
+                  QR 을 스캔하면 누구나 <b>유효 여부</b>만 확인할 수 있는 페이지가 열립니다.
+                  연락처·주소·납부 금액은 그 페이지에 나오지 않습니다.
+                </p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                <Alert tone="info" title="회원증 발급까지 남은 것">
+                  <ul className="list-disc pl-5">
+                    {cardData.verdict.blockers.map((b) => (
+                      <li key={b.code}>
+                        <b>{b.message}</b> — {b.howToFix}
+                      </li>
+                    ))}
+                  </ul>
+                </Alert>
+                {!cardData.verdict.duesOk && selectedInvoice && year === cardData.fiscalYear ? (
+                  <p className="text-sm text-ink-muted">
+                    남은 회비: <b className="tnum">{formatPeso(selectedInvoice.unpaidAmount)}</b> ·
+                    납기 {selectedInvoice.dueOn}
+                  </p>
+                ) : null}
+              </div>
+            )}
+          </CardBody>
+        </Card>
+
+        {/* ── 회원증 사진 (P3) ── */}
+        <PhotoUploadForm
+          token={mode === "token" ? member.linkToken : ""}
+          photoStatus={cardData.card?.photoStatus ?? ""}
+          photoViewUrl={cardData.photoViewUrl}
+          rejectReason={cardData.card?.photoRejectReason ?? ""}
+          uploadedAtText={
+            cardData.card?.photoUploadedAt ? manilaDateTimeStr(cardData.card.photoUploadedAt) : ""
+          }
+        />
 
         {/* ── 통합 납부 내역 — 회비·행사비·기부를 한 표로 (05_거래 원본) ── */}
         <Card>

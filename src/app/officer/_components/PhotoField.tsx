@@ -35,6 +35,17 @@ export interface PhotoFieldProps {
   allowPdf?: boolean;
   /** 첨부가 없을 때 화면에 띄울 경고 문장 (I3) */
   missingWarning?: string;
+  /**
+   * 첨부 미리보기 아래에 붙는 "어디에 보관되는가" 문장 (P3).
+   * 기본값은 임원 증빙 기준이다. 회원 사진처럼 보관 주체·목적이 다르면 바꿔 넘긴다 —
+   * 저장 위치를 틀리게 안내하는 것은 개인정보 고지 오류다.
+   */
+  savedNote?: string;
+  /**
+   * 모바일 카메라 방향 (P3). 증빙은 후면("environment"), 증명사진은 전면("user").
+   * undefined 면 카메라를 강제로 열지 않고 갤러리 선택도 자연스럽게 허용한다.
+   */
+  captureMode?: "environment" | "user";
   /** 파일이 바뀔 때마다 부모에게 알린다 — DRAFT 미리보기 계산에 쓴다 */
   onChangeHasFile?: (has: boolean) => void;
   /** 성공 제출 뒤 부모가 값을 비우기 위한 리셋 신호 (값이 바뀌면 비운다) */
@@ -48,6 +59,8 @@ export function PhotoField({
   hint,
   allowPdf,
   missingWarning,
+  savedNote = "저장하면 임원만 볼 수 있는 증빙 저장소에 보관됩니다.",
+  captureMode,
   onChangeHasFile,
   resetKey,
 }: PhotoFieldProps) {
@@ -117,7 +130,7 @@ export function PhotoField({
         type="file"
         accept={accept}
         // ★ name 을 주지 않는다. 원본 파일이 폼과 함께 전송되면 1MB 상한에 걸린다.
-        capture={allowPdf ? undefined : "environment"}
+        capture={captureMode ?? (allowPdf ? undefined : "environment")}
         onChange={(e) => void handleFile(e.currentTarget.files?.[0])}
         className="block w-full min-h-touch rounded-[var(--radius-field)] border border-line-strong bg-surface px-3 py-2 text-base file:mr-3 file:min-h-9 file:rounded-[var(--radius-field)] file:border-0 file:bg-brand-700 file:px-3 file:text-sm file:font-semibold file:text-white"
       />
@@ -143,9 +156,7 @@ export function PhotoField({
           )}
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-success">첨부됨 — {info}</p>
-            <p className="text-sm text-ink-muted">
-              저장하면 임원만 볼 수 있는 증빙 저장소에 보관됩니다.
-            </p>
+            <p className="text-sm text-ink-muted">{savedNote}</p>
           </div>
           <Button type="button" variant="secondary" size="sm" onClick={clear}>
             첨부 지우기

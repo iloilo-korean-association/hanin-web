@@ -218,6 +218,18 @@
   text-decoration-thickness: 1px;
 }
 
+/* ═══ 디지털 회원증 (P3) ════════════════════════════════════════════════════
+   화면에서는 폭에 맞춰 줄고, 인쇄하면 **실물 카드 규격(CR80 85.6 × 54mm)** 이 된다.
+   카드 안의 모든 치수는 em 이라, 바뀌는 것은 여기 font-size 한 줄뿐이다.
+   (85.6mm ≈ 342px, 54mm ≈ 216px — 화면에서는 4px/mm 로 잡는다)                */
+
+[data-id-card] {
+  width: 100%;
+  max-width: 342px;
+  aspect-ratio: 856 / 540;
+  font-size: 10px;
+}
+
 /* ═══ 인쇄 ══════════════════════════════════════════════════════════════════
    대표가 결산·감사자료를 종이로 뽑는다.
    · 네비/푸터/버튼은 잉크 낭비다 → .no-print
@@ -293,6 +305,29 @@
   /* 화면에서 가로 스크롤이던 표를 종이에서는 전부 펼친다 */
   [data-table-scroll] {
     overflow: visible !important;
+  }
+
+  /* ── 디지털 회원증 — 실물 카드 규격으로 못 박는다 (P3) ──────────────────
+     지갑에 들어가야 하므로 종이 크기와 무관하게 85.6 × 54mm 고정.
+     A4 에 뽑아서 선을 따라 오리면 실물 카드가 된다.                        */
+  [data-id-card] {
+    width: 85.6mm !important;
+    height: 54mm !important;
+    max-width: none !important;
+    aspect-ratio: auto !important;
+    /* 카드 안은 전부 em 이다 — 이 한 줄이 글자·사진·QR 을 함께 카드 규격으로 만든다 */
+    font-size: 2.5mm !important;
+    break-inside: avoid;
+    /* 오려낼 선. 표 테두리 규칙(#999)보다 진하게 둔다 */
+    border: 0.3mm solid #000 !important;
+    box-shadow: none !important;
+  }
+
+  /* 카드 안의 글자는 body 의 검정 강제를 그대로 쓰되, QR·사진은 원본 그대로 찍혀야 한다 */
+  [data-id-card] img,
+  [data-id-card] svg {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 }
 

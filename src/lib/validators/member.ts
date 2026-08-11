@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { zDateStr, zEmail, zOptText, zPhone, zText } from "./common";
+import { zDateStr, zEmail, zMemberNo, zOptText, zPhone, zText } from "./common";
 import { zDuesGrade, zGender, zHouseholdRole, zMemberStatus, zMemberType } from "./enums";
 
 /**
@@ -115,6 +115,45 @@ export const zLinkToken = z
   .trim()
   .toUpperCase()
   .regex(/^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{8}$/, "본인 확인 링크가 올바르지 않습니다.");
+
+/* ── 회원 사진 · 디지털 회원증 (P3) ────────────────────────────────────── */
+
+/**
+ * 회원 본인의 사진 업로드.
+ *
+ * ★ photoConsent 는 **반드시 true** 여야 한다. 명부공개동의(rosterConsent)와 별개의
+ *   독립 동의다 — 수집 목적이 다르다(회원증 발급 및 본인 확인). 필리핀 DPA(RA 10173)
+ *   상 목적별 동의와 그 시각을 남겨야 하므로 서버가 photoConsentAt 을 찍는다.
+ *   업로드 1회 = 수집 1회이므로 재업로드 때도 다시 받는다.
+ *
+ * ★ 사진 데이터(dataURL)는 여기서 검증하지 않는다. 형식·크기·MIME 검사는
+ *   저장 어댑터(_lib/upload.ts)가 한 곳에서 한다 — 두 군데서 검사하면 반드시 어긋난다.
+ */
+export const memberPhotoUploadSchema = z.object({
+  photoConsent: z.literal(true, {
+    message:
+      "사진 수집·이용(회원증 발급 및 본인 확인)에 동의하셔야 사진을 올리실 수 있습니다.",
+  }),
+});
+export type MemberPhotoUploadInput = z.infer<typeof memberPhotoUploadSchema>;
+
+/**
+ * 총무의 사진 검수.
+ * 반려는 사유가 **필수**다. 사유 없는 반려는 회원이 무엇을 고쳐야 할지 알 수 없어
+ * 총무에게 전화가 오고, 결국 검수가 멈춘다.
+ */
+export const memberPhotoReviewSchema = z.discriminatedUnion("decision", [
+  z.object({
+    decision: z.literal("승인"),
+    memberNo: zMemberNo,
+  }),
+  z.object({
+    decision: z.literal("반려"),
+    memberNo: zMemberNo,
+    rejectReason: zText(200, "반려 사유"),
+  }),
+]);
+export type MemberPhotoReviewInput = z.infer<typeof memberPhotoReviewSchema>;
 
 /** 회비 고지 생성 (연 1회). */
 export const duesIssueSchema = z.object({

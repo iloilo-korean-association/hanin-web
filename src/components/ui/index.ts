@@ -71,6 +71,8 @@ export { BigStat, StatGrid, StatLine, type StatItem, type StatTone } from "./Sta
 
 export { EmptyState } from "./EmptyState";
 
+export { QrCode } from "./QrCode";
+
 export { PageLoading, SkeletonLines, Spinner } from "./Loading";
 
 export { PageContainer, PageHeader, Stack } from "./PageHeader";

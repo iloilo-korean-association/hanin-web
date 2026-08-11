@@ -66,6 +66,13 @@ const STATUS_TONE: Record<string, BadgeTone> = {
   중복확인필요: "warn",
 };
 
+/** 회원증 사진 상태 (P3). 판정·조회는 /officer/members/photos 에서 한다. */
+const PHOTO_TONE: Record<string, BadgeTone> = {
+  대기: "warn",
+  승인: "success",
+  반려: "danger",
+};
+
 export default async function MembersPage({ searchParams }: { searchParams: SP }) {
   let me;
   try {
@@ -107,7 +114,7 @@ export default async function MembersPage({ searchParams }: { searchParams: SP }
       : {}),
   };
 
-  const [rows, filteredCount, grouped] = await Promise.all([
+  const [rows, filteredCount, grouped, pendingPhotos] = await Promise.all([
     prisma.member.findMany({
       where,
       orderBy: { memberNo: "asc" },
@@ -126,10 +133,15 @@ export default async function MembersPage({ searchParams }: { searchParams: SP }
         notifyConsent: true,
         // P1: 로그인 비밀번호 상태. 해시는 절대 화면으로 가져오지 않는다.
         credential: { select: { mustChange: true, lockedUntil: true } },
+        // P3: 회원증 사진 상태. ★ photoUrl 은 가져오지 않는다 —
+        //     명부는 사진을 보는 화면이 아니다. 얼굴 사진은 검수 화면에서만 연다.
+        card: { select: { photoStatus: true } },
       },
     }),
     prisma.member.count({ where }),
     prisma.member.groupBy({ by: ["status"], _count: { _all: true } }),
+    // 검수가 밀리면 회원증이 안 나간다. 대기 건수를 명부 머리에 띄워 눈에 걸리게 한다.
+    prisma.memberCard.count({ where: { photoStatus: "대기" } }),
   ]);
 
   const countOf = new Map(grouped.map((g) => [g.status, g._count._all]));
@@ -159,6 +171,11 @@ export default async function MembersPage({ searchParams }: { searchParams: SP }
         titleEn="Members"
         breadcrumb={[{ href: ROUTES.officer, label: "임원" }]}
         description="회원 명부 열람 화면입니다. 회원 정보는 이 화면에서 고칠 수 없습니다 — 정정이 필요하면 총무에게 요청하십시오. 비밀번호 재설정(회원관리 권한)만 가능합니다."
+        actions={
+          <LinkButton href={`${ROUTES.officer}/members/photos`} variant="primary">
+            사진 검수{pendingPhotos > 0 ? ` (${pendingPhotos}건 대기)` : ""}
+          </LinkButton>
+        }
       />
 
       <Stack gap="md">
@@ -245,6 +262,7 @@ export default async function MembersPage({ searchParams }: { searchParams: SP }
                     <TH>가입일</TH>
                     <TH>동의</TH>
                     <TH>비밀번호</TH>
+                    <TH>사진</TH>
                     <TH>
                       <span className="sr-only">작업</span>
                     </TH>
@@ -291,6 +309,16 @@ export default async function MembersPage({ searchParams }: { searchParams: SP }
                             )}
                             {locked ? <Badge tone="danger">잠김</Badge> : null}
                           </span>
+                        </TD>
+                        <TD>
+                          {/* P3 — 상태만. 사진 자체는 검수 화면에서만 연다 */}
+                          {!m.card ? (
+                            <Badge tone="neutral">미제출</Badge>
+                          ) : (
+                            <Badge tone={PHOTO_TONE[m.card.photoStatus] ?? "neutral"} dot>
+                              {m.card.photoStatus}
+                            </Badge>
+                          )}
                         </TD>
                         <TD>
                           {m.status !== "WITHDRAWN" ? (
