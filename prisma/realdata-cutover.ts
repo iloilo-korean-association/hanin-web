@@ -94,6 +94,23 @@ const ACCOUNTS = [
     isPublic: true,
     note: "BDO 이체 수납 계좌",
   },
+  {
+    // 현물 후원(TV·숙박권·쿠폰 등)은 현금·통장 잔액을 움직이지 않는다.
+    // 현금 계좌에 얹으면 현금실사 대사(감사 C4)가 통째로 깨지므로 별도 계좌로 받는다.
+    // 들어온 만큼 같은 금액이 나가는 성격이라 잔액은 0 근처에 머문다.
+    accountId: "AC04",
+    name: "현물 후원",
+    kind: "CASH",
+    currency: "PHP",
+    bankName: "",
+    accountNoMasked: "",
+    holder: "일로일로 한인회",
+    openingBalance: 0,
+    openedOn: OPEN_FROM,
+    manager: "",
+    isPublic: true,
+    note: "현물 후원 평가액 전용 — 현금 아님. 현금실사 대상에서 제외한다",
+  },
 ] as const;
 
 const FUNDS = [
@@ -155,6 +172,16 @@ const SETTING_UPDATES: { key: string; value: string; description?: string }[] = 
   { key: "기본.기금ID", value: "FD01" },
   { key: "기본.계좌ID.CASH", value: "AC02" },
   { key: "기본.계좌ID.BANK", value: "AC03" },
+  {
+    key: "기본.계좌ID.KRW",
+    value: "AC01",
+    description: "원화 수납분이 들어가는 계좌 — 장부 임포트가 통화로 계좌를 고를 때 쓴다",
+  },
+  {
+    key: "기본.계좌ID.INKIND",
+    value: "AC04",
+    description: "현물 후원 평가액 전용 계좌. 현금 계좌를 넣으면 현금실사 대사가 깨진다",
+  },
   { key: "기본.계좌ID.GCASH", value: "", description: "[확인 필요] GCash 계좌 없음 — 개설 시 계좌 등록 후 기재" },
   { key: "기본.계좌ID.MAYA", value: "", description: "[확인 필요] Maya 계좌 없음 — 개설 시 계좌 등록 후 기재" },
   { key: "기본.과목코드.회비", value: "R100" },

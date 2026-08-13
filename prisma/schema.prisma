@@ -931,6 +931,13 @@ model ImportBatch {
   status     String   @default("검토중") // 상태 검토중/반영됨/폐기 — validators/enums.ts IMPORT_BATCH_STATUSES
   note       String   @default("") // 비고
 
+  // [추가 L3] 업로드 시점 파서 요약(SheetSummary[] + 시트 경고) JSON 스냅샷.
+  //   왜 필요한가: 검토 화면의 **대조표**는 "파서 합계 vs 엑셀 자체 합계행" 이다.
+  //   엑셀 합계행 값은 어느 ImportRow 에도 들어 있지 않다(합계행은 행으로 만들지 않는다).
+  //   행에서 되계산할 수 없으므로 업로드할 때 찍어 둔다 — 나중에 원본 파일이 사라져도
+  //   "그때 무엇과 무엇을 대조했는가" 가 남는다.
+  summaryJson String @default("")
+
   rows ImportRow[]
 
   @@index([status])
@@ -984,11 +991,22 @@ model ImportRow {
 // ─────────────────────────────────────────────────────────────────────────────
 model PayerAlias {
   alias     String   @id // 납부자 표기 원문 (unique — @id 로 강제)
-  memberNo  String // 회원번호 FK
+  /**
+   * 회원번호 FK. **판정이 '회원아님' 이면 null** 이다.
+   * [추가 L4] nullable 로 바꾼 이유: 교회·선교사협의회 같은 단체와 오기재 표기는
+   * 회원이 아니지만 "아직 판단 안 함" 과 반드시 구분돼야 한다. 구분이 없으면
+   * 총무가 볼 때마다 같은 이름이 미연결 목록에 다시 떠서 영원히 줄지 않는다.
+   */
+  memberNo  String?
+  /** [추가 L4] 판정 — 회원 / 회원아님. validators/enums.ts PAYER_ALIAS_KINDS */
+  kind      String   @default("회원")
   createdBy String // 연결한 임원 (이메일)
   createdAt DateTime @default(now()) // 연결 시각
+  /** [추가 L4] 판단 근거 메모 (단체·오기재 사유 등) */
+  note      String   @default("")
 
-  member Member @relation(fields: [memberNo], references: [memberNo])
+  member Member? @relation(fields: [memberNo], references: [memberNo])
 
   @@index([memberNo])
+  @@index([kind])
 }

@@ -53,7 +53,13 @@ const MIME_EXT: Readonly<Record<string, string>> = {
   "image/png": "png",
   "image/webp": "webp",
   "application/pdf": "pdf",
+  // [추가 L3] 장부 임포트 엑셀. 반영된 거래의 증빙(evidenceUrl)이 되므로 저장소에 남아야 한다.
+  //   .xls(구형 바이너리)는 받지 않는다 — 파서(domain/importXlsx.ts)가 읽지 못한다.
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
 };
+
+/** 장부 임포트가 받는 유일한 MIME. 업로드 액션이 이 값으로 다시 검사한다. */
+export const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 export type SaveResult = { ok: true; url: string; bytes: number } | { ok: false; message: string };
 

@@ -19,3 +19,6 @@ export * from "./memberPayments";
 export * from "./memberCard";
 export * from "./settings";
 export * from "./mail";
+// 장부 임포트 반영 규칙(L3). 파서(importXlsx.ts)는 exceljs 를 끌고 오므로 여기 넣지 않는다 —
+// 필요한 곳에서 "@/lib/domain/importXlsx" 로 직접 가져간다.
+export * from "./importMapping";

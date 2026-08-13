@@ -332,6 +332,15 @@ export const IMPORT_BLOCK_TYPES = [
 export const zImportBlockType = z.enum(IMPORT_BLOCK_TYPES);
 export type ImportBlockType = (typeof IMPORT_BLOCK_TYPES)[number];
 
+/**
+ * 납부자 표기 판정 (L4).
+ * '회원' 이면 memberNo 가 반드시 있고, '회원아님'(단체·오기재)이면 반드시 null 이다.
+ * 두 경우 다 PayerAlias 행을 남긴다 — 남기지 않으면 "아직 안 봤다" 와 구분되지 않는다.
+ */
+export const PAYER_ALIAS_KINDS = ["회원", "회원아님"] as const;
+export const zPayerAliasKind = z.enum(PAYER_ALIAS_KINDS);
+export type PayerAliasKind = (typeof PAYER_ALIAS_KINDS)[number];
+
 /* ── 공개 표기 정책 (00_설정 '공개.수취인_개인표기') ──────────────────── */
 
 export const PAYEE_POLICIES = ["마스킹", "전체", "숨김"] as const;

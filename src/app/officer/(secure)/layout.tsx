@@ -71,6 +71,14 @@ export default async function SecureOfficerLayout({ children }: { children: Reac
     },
     { href: `${ROUTES.officer}/audit`, label: "감사", blocked: null },
 
+    // 장부 가져오기 (L3/L4) — 실장부 엑셀을 웹 장부로 옮기는 통로.
+    // 목록·대조표는 조회권만 있으면 열리고, 업로드·반영·연결만 입력권이 막는다.
+    {
+      href: `${ROUTES.officer}/ledger-import`,
+      label: "장부 가져오기",
+      blocked: writeBlocked ?? (me.can("입력권") ? null : "입력권이 없는 직책입니다."),
+    },
+
     // 회원 명부 — 읽기 전용(v1). 개인정보 화면이라 임원(조회권) 전용이다.
     {
       href: `${ROUTES.officer}/members`,
