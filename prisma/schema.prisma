@@ -101,6 +101,7 @@ model Member {
   outboxMails     OutboxMail[]
   credential      MemberCredential? // [추가] 회원 비밀번호 (P1). 01_회원 23열은 건드리지 않았다
   card            MemberCard? // [추가] 회원 사진·디지털 회원증 (P3). 역시 23열 밖에 둔다
+  payerAliases    PayerAlias[] // [추가] 엑셀 납부자 표기 → 회원 연결 (장부 임포트 L4)
 
   @@index([status])
   @@index([duesGrade])
@@ -234,6 +235,7 @@ model Transaction {
   donationUses    DonationUse[]    @relation("DonationUseReceipt")
   eventSignups    EventSignup[]    @relation("EventSignupReceipt")
   reconciliations Reconciliation[]
+  importRows      ImportRow[] // [추가] 이 거래를 만든 엑셀 임포트 행 (장부 임포트 L3)
 
   @@unique([fiscalYear, seq])
   @@index([date])
@@ -909,4 +911,84 @@ model EmergencyContact {
   @@index([groupId, sortOrder])
   @@index([isActive])
   @@index([grade])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// [추가] 장부 임포트 배치 — 실제 회계장부 엑셀(2021~2026)을 웹 장부로 옮기는 통로.
+//
+// 흐름: 총무가 .xlsx 업로드(비공개 Blob) → 파서(domain/importXlsx.ts)가 행 단위로
+// ImportRow 를 만든다 → 총무가 검토(확인필요 행 수정·제외) → 반영 시 Transaction 생성.
+//
+// 규칙은 다른 모델과 같다 — enum 금지(String + zod, validators/enums.ts 가 정본),
+// 금액은 정수(페소는 반올림, 원본 표기는 rawJson 에 보존).
+// ─────────────────────────────────────────────────────────────────────────────
+model ImportBatch {
+  batchId    String   @id // 배치ID (IB-0001)
+  fileName   String // 업로드된 파일 이름 (원본 경로 아님)
+  blobUrl    String   @default("") // 비공개 Blob URL — 반영 시 Transaction.evidenceUrl 로 복사된다 (I3)
+  uploadedBy String // 업로더 (임원 이메일)
+  uploadedAt DateTime @default(now()) // 업로드 시각
+  status     String   @default("검토중") // 상태 검토중/반영됨/폐기 — validators/enums.ts IMPORT_BATCH_STATUSES
+  note       String   @default("") // 비고
+
+  rows ImportRow[]
+
+  @@index([status])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// [추가] 장부 임포트 행 — 엑셀 한 행(또는 한 셀 블록)의 파싱 결과.
+//
+// ★ externalRef 가 멱등 키다. "XLSX:<시트>:r<행>:<블록>" (한 행에 원화·페소가
+//   둘 다 있으면 ":KRW"/":PHP" 를 덧붙인다). 전역 unique 라 같은 엑셀을 다시
+//   올려도 같은 행이 두 번 반영되지 않는다.
+// ★ 원본 셀은 rawJson(JSON 문자열)에 그대로 보존한다 — 소수점 지출을 페소로
+//   반올림해도 원본 42835.65 는 여기 남는다.
+// ─────────────────────────────────────────────────────────────────────────────
+model ImportRow {
+  id        String @id @default(cuid())
+  batchId   String // 배치ID FK
+  sheetName String // 엑셀 시트 이름 ("2021년 한인회비" / "금부원 교민지원")
+  rowNo     Int // 엑셀 행 번호 (1부터, 헤더 포함 원본 그대로)
+  blockType String // 블록 회비수입/지출/후원수입/현물후원/금부원수입/금부원지출 — IMPORT_BLOCK_TYPES
+  rawJson   String @default("") // 원본 셀 값 JSON 문자열 (열문자 → 표시문자열)
+
+  // ── 파싱 결과 ──
+  date         String? // 정규화된 날짜 (yyyy-MM-dd). 누락·해석 불가면 null + status=확인필요
+  payerName    String  @default("") // 납부자 표기 원문 그대로 (부부 병기·상호 병기 유지. 분리하지 않는다)
+  description  String  @default("") // 내역 (지출 H열 등)
+  amount       Int // 금액 — 정수. 페소 소수점은 반올림(원본은 rawJson)
+  currency     String  @default("PHP") // 통화 PHP/KRW (D열=KRW, E열=PHP)
+  method       String  @default("CASH") // 수단 CASH/BANK/INKIND (날짜 텍스트 괄호에서 추출)
+  parseWarning String  @default("") // 파싱 경고 — " | " 구분. 비면 경고 없음
+
+  status      String  @default("정상") // 상태 정상/확인필요/제외/반영됨 — IMPORT_ROW_STATUSES
+  receiptNo   String? // 반영 시 생성된 거래 영수증번호 링크
+  externalRef String  @unique // 멱등 키 "XLSX:<시트>:r<행>:<블록>[:<통화>]"
+
+  batch   ImportBatch  @relation(fields: [batchId], references: [batchId])
+  receipt Transaction? @relation(fields: [receiptNo], references: [receiptNo])
+
+  @@index([batchId, status])
+  @@index([sheetName, rowNo])
+  @@index([blockType])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// [추가] 납부자 표기 → 회원 연결 (L4).
+//
+// 엑셀의 납부자 표기("서태원/김미화", "정한(강원마트)")를 회원번호에 잇는다.
+// 연도가 달라도 같은 표기는 같은 회원이므로 배치와 무관하게 재사용한다.
+// 연결되면 해당 표기의 전 거래 counterpartyMemberNo 를 일괄 갱신하고
+// DuesInvoice 를 연도별 upsert 한다 — 회원 포털 납부 내역에 자동 표시된다.
+// ─────────────────────────────────────────────────────────────────────────────
+model PayerAlias {
+  alias     String   @id // 납부자 표기 원문 (unique — @id 로 강제)
+  memberNo  String // 회원번호 FK
+  createdBy String // 연결한 임원 (이메일)
+  createdAt DateTime @default(now()) // 연결 시각
+
+  member Member @relation(fields: [memberNo], references: [memberNo])
+
+  @@index([memberNo])
 }

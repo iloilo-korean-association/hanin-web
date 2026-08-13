@@ -304,6 +304,34 @@ export const MAGIC_PURPOSES = ["OFFICER_LOGIN", "MEMBER_LINK", "PASSWORD_RESET"]
 export const zMagicPurpose = z.enum(MAGIC_PURPOSES);
 export type MagicPurpose = (typeof MAGIC_PURPOSES)[number];
 
+/* ── [추가] 장부 임포트 (엑셀 → 웹 장부) ───────────────────────────────── */
+
+/** 임포트 배치 상태. '반영됨' 은 행 반영이 끝나 배치를 닫았다는 뜻. */
+export const IMPORT_BATCH_STATUSES = ["검토중", "반영됨", "폐기"] as const;
+export const zImportBatchStatus = z.enum(IMPORT_BATCH_STATUSES);
+export type ImportBatchStatus = (typeof IMPORT_BATCH_STATUSES)[number];
+
+/**
+ * 임포트 행 상태.
+ * 파서는 '정상'/'확인필요' 만 만든다. '제외'/'반영됨' 은 검토 화면(L3)에서 정해진다.
+ * '확인필요' 는 날짜 누락·해석 불가·금액 없음 등 — 임의로 해석하지 않고 사람이 정한다.
+ */
+export const IMPORT_ROW_STATUSES = ["정상", "확인필요", "제외", "반영됨"] as const;
+export const zImportRowStatus = z.enum(IMPORT_ROW_STATUSES);
+export type ImportRowStatus = (typeof IMPORT_ROW_STATUSES)[number];
+
+/** 엑셀 블록 구분 — 어느 표에서 나온 행인가. */
+export const IMPORT_BLOCK_TYPES = [
+  "회비수입", // 연도 시트 좌측 A~E (원화 D / 페소 E)
+  "지출", // 연도 시트 우측 G~J
+  "후원수입", // 후원금 현금 블록 (2022 사무실 오픈 기부, 2024 족구·체육대회 등)
+  "현물후원", // TV·쿠폰·물품 — method=INKIND, 평가액 없으면 확인필요
+  "금부원수입", // '금부원 교민지원' 시트 수입 (한화 B~C / 페소 E~F)
+  "금부원지출", // '금부원 교민지원' 시트 지출·지원 항목 — 지정기금 거래로 반영
+] as const;
+export const zImportBlockType = z.enum(IMPORT_BLOCK_TYPES);
+export type ImportBlockType = (typeof IMPORT_BLOCK_TYPES)[number];
+
 /* ── 공개 표기 정책 (00_설정 '공개.수취인_개인표기') ──────────────────── */
 
 export const PAYEE_POLICIES = ["마스킹", "전체", "숨김"] as const;

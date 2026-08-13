@@ -351,13 +351,20 @@ export async function submitJoin(_prev: JoinState, formData: FormData): Promise<
  * 문자열 최대값이 아니라 **숫자로** 최대값을 찾는다. M9999 다음에 M10000 이 생기면
  * 문자열 정렬에서 'M10000' < 'M9999' 가 되어 번호가 되감기기 때문이다.
  * 회원 수가 수백 명 규모라 전체를 읽어도 비용이 무시할 만하다.
+ *
+ * ★ M9xxx(9000번대)는 시스템 계정 대역이다 — 관리자 M9999(ensure-admin.ts)가 여기 산다.
+ *   이 대역을 최대값 계산에 넣으면 실회원이 M10000 부터 발번되는 사고가 난다(실제 있었다).
+ *   그래서 9000 이상은 건너뛰고 **실회원 최대값 + 1** 을 쓴다.
+ *   (실회원이 8,999명을 넘는 날이 오면 이 규칙을 다시 설계해야 한다 — 현재 수백 명 규모)
  */
 async function nextMemberNo(tx: Tx): Promise<string> {
   const rows = await tx.member.findMany({ select: { memberNo: true } });
   let max = 0;
   for (const r of rows) {
     const n = Number(r.memberNo.replace(/\D/g, ""));
-    if (Number.isFinite(n) && n > max) max = n;
+    if (!Number.isFinite(n)) continue;
+    if (n >= 9000) continue; // 시스템 계정 대역(M9999 등)은 발번에서 제외
+    if (n > max) max = n;
   }
   return "M" + String(max + 1).padStart(4, "0");
 }
