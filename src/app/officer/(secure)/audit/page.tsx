@@ -65,7 +65,13 @@ export const dynamic = "force-dynamic";
  *   같은 계정으로 열면 서버가 거부한다. 그 대비가 통제가 동작한다는 증거다.
  */
 
-type Severity = "CRITICAL" | "WARN";
+/**
+ * INFO — "위반은 아니지만 알고 있어야 하는 사실".
+ * 과거 장부처럼 규정 이전이라 애초에 기록이 있을 수 없는 구간을 CRITICAL 로 세면
+ * 경고가 수백 건으로 불어나 진짜 위반이 묻힌다. 그렇다고 조용히 빼면 장부가 감춘 것이
+ * 되므로, 따로 세워 건수·합계를 명시한다.
+ */
+type Severity = "CRITICAL" | "WARN" | "INFO";
 type Finding = {
   sev: Severity;
   code: string;
@@ -376,12 +382,26 @@ export default async function AuditPage() {
       .map((a) => a.approvalId),
   );
   const unapproved: string[] = [];
+  /* ★ 과거 장부(승인제도 시행 이전)는 승인 기록이 **존재할 수 없다.**
+     엑셀에서 소급 임포트한 2021~2025 지출을 같은 잣대로 재면 CRITICAL 이 수백 건 뜨고,
+     그 소음에 정작 새로 생긴 진짜 위반이 묻힌다. 그래서 제외하되 **숨기지 않는다** —
+     아래에 INFO 로 건수·합계를 따로 세워 "여기는 승인기록이 없는 구간" 임을 명시한다.
+     기준 연도는 00_설정 '승인제도.시행연도' 이며, 그 해부터는 규정대로 검사한다. */
+  const approvalSince = cfgNum(settings, "승인제도.시행연도", 0);
+  const legacyUnapproved: string[] = [];
+  let legacyAmount = 0;
   for (const t of txs) {
     if (t.status !== "POSTED" || t.direction !== "OUT") continue;
     // 내부이체(자기 계좌 간 이동)는 지출이 아니다 — 승인한도표의 대상이 아니다.
     // 빼지 않으면 현금함에서 통장으로 옮긴 것만으로 "무단 지출" 경고가 뜬다.
     if (isInternalTransfer(t)) continue;
     if (t.amountPhp <= soleLimit) continue;
+    const isLegacy = approvalSince > 0 && t.fiscalYear < approvalSince && !t.approvalId;
+    if (isLegacy) {
+      legacyUnapproved.push(`${t.receiptNo} (${t.date}) — ${formatPeso(t.amountPhp)}`);
+      legacyAmount += t.amountPhp;
+      continue;
+    }
     if (!t.approvalId) unapproved.push(`${t.receiptNo} — 승인ID 없음 (${formatPeso(t.amountPhp)})`);
     else if (!approvedIds.has(t.approvalId))
       unapproved.push(`${t.receiptNo} — 승인 ${t.approvalId} 이 승인 상태가 아님 (${formatPeso(t.amountPhp)})`);
@@ -393,6 +413,18 @@ export default async function AuditPage() {
       title: `사전승인 없는 한도초과 지출 ${unapproved.length}건`,
       lines: cap(unapproved),
       fix: `전결한도 ${formatPeso(soleLimit)} 를 넘는 지출은 11_승인에 승인 기록이 있어야 합니다.`,
+    });
+  }
+  if (legacyUnapproved.length) {
+    push({
+      sev: "INFO",
+      code: "C9-과거",
+      title: `과거 장부(${approvalSince}년 이전) 승인기록 없는 한도초과 지출 ${legacyUnapproved.length}건 · ${formatPeso(legacyAmount)}`,
+      lines: cap(legacyUnapproved),
+      fix:
+        `이 구간은 사전승인 제도가 시행되기 전이라 11_승인 기록이 존재하지 않습니다. ` +
+        `위반이 아니라 제도 이전이라는 뜻이므로 C9(CRITICAL)에서 제외했습니다. ` +
+        `${approvalSince}년부터의 지출은 규정대로 검사합니다. 기준 연도는 00_설정 "승인제도.시행연도" 에서 바꿉니다.`,
     });
   }
 
@@ -550,6 +582,9 @@ export default async function AuditPage() {
 
   const critical = findings.filter((f) => f.sev === "CRITICAL");
   const warn = findings.filter((f) => f.sev === "WARN");
+  const info = findings.filter((f) => f.sev === "INFO");
+  /** 요약 배너·"이상 없음" 판정은 조치가 필요한 것만 센다 — INFO 는 조치 대상이 아니다. */
+  const actionable = critical.length + warn.length;
 
   return (
     <PageContainer wide>
@@ -571,17 +606,21 @@ export default async function AuditPage() {
           </p>
         </Alert>
 
-        {findings.length === 0 ? (
+        {actionable === 0 ? (
           <Alert tone="success" title="이상 없음 — 검사 항목을 전부 통과했습니다">
             <p>
               영수증번호 결번, 증빙 없는 POSTED, 현금 2인 확인, 실사 차액, 지정기부 초과 사용,
               사전승인 없는 지출, 마감연도 침범, 이해관계자 미신고, 대차 검산까지 모두 정상입니다.
+              {info.length ? " 아래 참고 항목은 조치 대상이 아닙니다." : ""}
             </p>
           </Alert>
         ) : (
           <Alert
             tone={critical.length ? "error" : "warn"}
-            title={`심각 ${critical.length}건 / 주의 ${warn.length}건`}
+            title={
+              `심각 ${critical.length}건 / 주의 ${warn.length}건` +
+              (info.length ? ` / 참고 ${info.length}건` : "")
+            }
           >
             <p>
               {critical.length
@@ -593,13 +632,18 @@ export default async function AuditPage() {
 
         {findings.length > 0 ? (
           <Stack gap="sm">
-            {[...critical, ...warn].map((f, i) => (
+            {[...critical, ...warn, ...info].map((f, i) => (
               <Card key={`${f.code}-${i}`} as="article">
                 <CardHeader
                   title={
                     <span className="flex flex-wrap items-center gap-2">
-                      <Badge tone={f.sev === "CRITICAL" ? "danger" : "warn"} dot>
-                        {f.sev === "CRITICAL" ? "심각" : "주의"}
+                      <Badge
+                        tone={
+                          f.sev === "CRITICAL" ? "danger" : f.sev === "WARN" ? "warn" : "info"
+                        }
+                        dot
+                      >
+                        {f.sev === "CRITICAL" ? "심각" : f.sev === "WARN" ? "주의" : "참고"}
                       </Badge>
                       <span className="font-mono text-sm text-ink-muted">{f.code}</span>
                       <span>{f.title}</span>
@@ -735,7 +779,10 @@ export default async function AuditPage() {
               <li>C5 지정기부 접수액을 넘는 사용</li>
               <li>C7 06_회비고지 납부합계 vs 05_거래 회비수입 합계</li>
               <li>C8 마스터(계좌·기금·과목)에 없는 코드</li>
-              <li>C9 사전승인 없는 전결한도 초과 지출</li>
+              <li>
+                C9 사전승인 없는 전결한도 초과 지출 — 단, 승인제도 시행 이전(과거 장부)은
+                기록이 존재할 수 없으므로 <b>C9-과거</b> 로 따로 세운다
+              </li>
               <li>C10 마감 회계연도의 DRAFT · 사후 입력 흔적 (I5)</li>
               <li>C11 이해관계자 거래인데 13_이해상충 신고가 없음</li>
               <li>C12 14일 넘게 방치된 DRAFT · 사유 없는 VOIDED (I1)</li>

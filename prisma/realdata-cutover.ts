@@ -169,6 +169,13 @@ const SETTING_UPDATES: { key: string; value: string; description?: string }[] = 
     value: "",
     description: "여기 적힌 연도의 거래는 입력·수정 불가 (I5). 실데이터 검수 후 2021~2025 를 순서대로 마감한다",
   },
+  {
+    // 이 해부터 사전승인(11_승인) 기록을 요구한다. 그 이전은 제도 자체가 없어
+    // 승인 기록이 존재할 수 없으므로 감사 C9(CRITICAL)에서 빼고 C9-과거(INFO)로 센다.
+    key: "승인제도.시행연도",
+    value: "2026",
+    description: "이 해부터 전결한도 초과 지출에 사전승인을 요구한다. 이전 연도는 소급 임포트 구간이라 승인기록이 없다",
+  },
   { key: "기본.기금ID", value: "FD01" },
   { key: "기본.계좌ID.CASH", value: "AC02" },
   { key: "기본.계좌ID.BANK", value: "AC03" },
