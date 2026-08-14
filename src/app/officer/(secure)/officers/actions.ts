@@ -49,18 +49,11 @@ export async function savePermissionsAction(
     // 체크된 권한 수집
     const next: Permission[] = PERMISSIONS.filter((p) => fdStr(fd, `perm_${p}`) === "on");
 
-    const limitRaw = fdStr(fd, "approvalLimit").trim().replace(/[,\s]/g, "");
-    const approvalLimit = limitRaw === "" ? 0 : Math.trunc(Number(limitRaw));
-    if (!Number.isFinite(approvalLimit) || approvalLimit < 0) {
-      return fail("승인한도는 0 이상의 숫자로 적어 주십시오.");
-    }
-    // 승인권이 없는데 한도만 있는 것은 의미가 없다. 헷갈리게 두지 않는다.
-    if (!next.includes("승인권") && approvalLimit > 0) {
-      return fail(
-        "승인권이 없는데 승인한도가 설정돼 있습니다.",
-        "승인권을 함께 주시거나 한도를 0 으로 두십시오.",
-      );
-    }
+    // 승인한도는 더 이상 아무것도 막지 않는다 — 사전 승인 절차 자체가 없어졌다.
+    // 화면에서 칸을 뺐고, 폼으로 들어와도 무시하고 **기존 값을 그대로 둔다.**
+    // 0 으로 밀어 버리면 과거에 어떤 한도가 있었는지가 사라진다(총회가 결재선을
+    // 되살리기로 하면 그 값이 출발점이 된다).
+    const approvalLimit = target.approvalLimit;
 
     const status = fdStr(fd, "status") === "INACTIVE" ? "INACTIVE" : "ACTIVE";
 

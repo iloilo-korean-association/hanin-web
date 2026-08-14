@@ -475,22 +475,23 @@ export default async function OfficerDashboardPage() {
             <ul className="flex flex-col gap-2">
               <PermissionLine
                 allowed={me.can("입력권") && !me.isAuditor}
-                label="수납 기록 · 지출 요청 접수 · 집행(장부 기입)"
+                label="장부에 수입·지출 적기 · 고치기 · 무효 처리"
                 need="입력권"
               />
               <PermissionLine
-                allowed={me.can("승인권") && !me.isAuditor}
-                label="지출 결재(승인 · 반려)"
-                need="승인권"
+                allowed={me.can("확인권")}
+                label="감사 확인 도장 (본인이 적은 거래는 제외)"
+                need="확인권"
               />
               <PermissionLine allowed={me.can("조회권")} label="감사 화면 · 원장 조회" need="조회권" />
             </ul>
             {me.isAuditor ? (
               <Alert tone="warn" title="감사 계정입니다" className="mt-4">
                 <p>
-                  어떤 화면에서도 저장할 수 없습니다. 화면에서 버튼을 감추는 것이 아니라 서버가
-                  거부합니다 — 수납 화면을 직접 열어 확인해 보십시오. 감사가 직접 입력하면 감사의
-                  독립성이 깨집니다.
+                  장부에는 아무것도 저장할 수 없습니다. 화면에서 버튼을 감추는 것이 아니라 서버가
+                  거부합니다 — 장부 화면을 직접 열어 확인해 보십시오. 예외는 감사 화면의{" "}
+                  <strong>확인 도장</strong> 하나이며, 그것은 장부를 고치는 것이 아니라 “내가
+                  봤다”를 기록하는 것입니다.
                 </p>
               </Alert>
             ) : null}

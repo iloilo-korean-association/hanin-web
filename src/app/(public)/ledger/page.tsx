@@ -720,6 +720,28 @@ export default async function LedgerPage({ searchParams }: { searchParams: SP })
                             </TD>
                             <TD>
                               <StatusBadge status={e.voided ? "VOIDED" : "POSTED"} />
+                              {/* ★ 승인 절차를 없앤 뒤로 "여기 있다 = 결재를 거쳤다" 가 아니다.
+                                  누가 봤는지를 밖에서 확인할 수 있어야 한다. */}
+                              {!e.voided ? (
+                                <span className="mt-1 block">
+                                  {e.reviewed ? (
+                                    <Badge tone="success" title="감사가 이 거래를 확인했습니다">
+                                      감사확인
+                                    </Badge>
+                                  ) : (
+                                    <Badge tone="warn" title="아직 감사가 확인하지 않은 거래입니다">
+                                      감사 미확인
+                                    </Badge>
+                                  )}
+                                </span>
+                              ) : null}
+                              {e.edited ? (
+                                <span className="mt-1 block">
+                                  <Badge tone="neutral" title="처음 적힌 뒤 내용이 바뀌었습니다">
+                                    수정됨
+                                  </Badge>
+                                </span>
+                              ) : null}
                             </TD>
                           </TR>
                         );

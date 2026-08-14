@@ -62,7 +62,7 @@ export function Alert({
 /**
  * 인가 거부 화면. GuardError 를 그대로 그린다.
  *
- *   try { await requireOfficer({ permissions: ["승인권"], write: true }); }
+ *   try { await requireOfficer({ permissions: ["확인권"], write: true }); }
  *   catch (e) { if (isGuardError(e)) return <GuardDenied message={e.message} howToFix={e.howToFix} />; throw e; }
  */
 export function GuardDenied({

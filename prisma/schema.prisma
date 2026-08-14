@@ -221,6 +221,18 @@ model Transaction {
   //        시트에서는 무효사유 텍스트에 번호를 적어 두던 것이라 기계가 검증할 수 없었다.
   reversalOfReceiptNo String?
 
+  // ── [추가] 직접 입력 장부(/officer/book) 전환에 필요한 3개 ──────────────
+  //
+  // 사전 승인 절차를 없애고 총무가 바로 적는 방식으로 바꾸면서,
+  // 통제가 **입력 전 결재**에서 **입력 후 감사 확인**으로 옮겨졌다.
+  // 그 확인 도장이 남을 자리가 필요하다.
+  //
+  // ★ 감사가 여기 도장을 찍는 것은 장부를 고치는 것이 아니다.
+  //   금액·과목·상대방은 감사가 건드리지 못한다(화면·액션 양쪽에서 막는다).
+  updatedAt  DateTime  @updatedAt // 최종수정시각 — 공개 장부에 '수정됨' 으로 나간다
+  reviewedBy String    @default("") // 감사확인자 (이메일). 빈 값 = 아직 아무도 안 봄
+  reviewedAt DateTime? // 감사확인시각
+
   account       Account       @relation(fields: [accountId], references: [accountId])
   fund          Fund          @relation(fields: [fundId], references: [fundId])
   category      Category      @relation(fields: [categoryCode], references: [code])
@@ -245,6 +257,8 @@ model Transaction {
   @@index([fundId, date])
   @@index([categoryCode])
   @@index([relatedParty])
+  // 감사 확인 대기 큐가 매번 이 조건으로 훑는다: reviewedAt IS NULL
+  @@index([reviewedAt])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

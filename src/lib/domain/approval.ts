@@ -4,7 +4,19 @@ import type { ConflictVerdict, OfficerRow } from "./conflict";
 import { isRecused } from "./conflict";
 
 /**
- * 결재선·승인단계 판정.
+ * 결재선·승인단계 판정. **현재 휴면 상태다.**
+ *
+ * ── 2026-08-14 이후 ─────────────────────────────────────────────────────
+ * 사전 승인 절차(요청 → 1차 결재 → 2차 결재 → 집행)를 없앴다. 지출 1건에 화면 2개·
+ * 제출 2~4회·사람 2~3명이 필요했고, 전결이라도 2회는 거쳐야 했기 때문이다.
+ * 이제 /officer/book 에서 한 줄 적으면 확정되고, 통제는 감사 화면의 확인 대기 큐가 맡는다.
+ *
+ * 이 파일은 **지우지 않고 남긴다.**
+ *   ① 과거 Approval 행의 결재 흔적을 검증하는 데 계속 쓰인다(prisma/verify.ts).
+ *   ② 총회가 결재선을 되살리기로 하면 다시 붙일 자리가 있어야 한다.
+ *
+ * ★ 아래 canOfficerApprove 안의 "승인권" 은 **없어진 권한 이름**이다(현재는 '확인권').
+ *   당시 규칙을 그대로 보존하려고 남겨 둔 것이니, 되살릴 때 함께 손봐야 한다.
  *
  * 원본: 02_노코드MVP/AppsScript/13_웹앱_임원.gs 의 결재선판정_ 과 승인 처리부의 결재 흔적 검증.
  *       규정 원본: 03_거버넌스문서/승인한도표.md
@@ -295,7 +307,7 @@ export type ActionCheck = {
   recused: boolean;
 };
 
-/** 권한 문자열('승인권,조회권')에 특정 권한이 있는가. */
+/** 권한 문자열('확인권,조회권')에 특정 권한이 있는가. */
 export function hasPermission(permissions: string, want: string): boolean {
   return String(permissions ?? "")
     .split(",")

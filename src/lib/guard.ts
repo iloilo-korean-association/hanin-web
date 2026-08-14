@@ -124,6 +124,18 @@ export interface RequireOfficerOptions {
    * 데이터를 바꾸는 모든 서버 액션은 반드시 write: true 로 부른다.
    */
   write?: boolean;
+  /**
+   * 감사 계정에게도 이 쓰기를 허용한다. **극히 좁게만 쓴다.**
+   *
+   * 유일한 정당한 용도는 **감사 본인의 확인 도장**이다 (Transaction.reviewedBy/reviewedAt).
+   * 사전 승인 절차를 없앤 뒤로 통제가 "입력 전 결재" 에서 "입력 후 감사" 로 옮겨졌는데,
+   * 감사가 아무것도 못 쓰면 그 확인을 기록할 자리가 없다.
+   *
+   * ★ 이 옵션을 켠 액션은 **장부 값(금액·과목·상대방·상태)을 절대 건드리면 안 된다.**
+   *   건드리는 순간 "감사가 장부를 고칠 수 있으면 감사가 아니다" 가 깨진다.
+   *   지금 이 옵션을 쓰는 곳은 reviewTransactionAction 하나뿐이다.
+   */
+  allowAuditorAttestation?: boolean;
   /** 거부 메시지에 찍히는 화면 이름. 예: "수납 기록" */
   screen?: string;
 }
@@ -209,7 +221,8 @@ export async function requireOfficer(opts: RequireOfficerOptions = {}): Promise<
   const me = toContext(row);
 
   // 감사는 읽기 전용. 쓰기 함수를 부르면 서버에서 거부한다.
-  if (opts.write && me.isAuditor) {
+  // 예외는 감사 본인의 확인 도장 하나뿐이다(allowAuditorAttestation 주석 참조).
+  if (opts.write && me.isAuditor && !opts.allowAuditorAttestation) {
     throw new GuardError(
       "READ_ONLY",
       `감사(${me.role || "조회 전용"}) 계정은 읽기 전용입니다. ${screen}에서 저장할 수 없습니다.`,
@@ -241,27 +254,18 @@ export async function currentOfficer(): Promise<OfficerContext | null> {
   }
 }
 
-/* ═══════════════════════ 승인한도 · 회피 ═══════════════════════ */
+/* ═══════════════════════ 회피 ═══════════════════════ */
 
-/**
- * 이 임원이 이 금액을 단독으로 승인할 수 있는가 (12_임원.승인한도).
+/*
+ * assertApprovalLimit 은 삭제했다.
  *
- * 초과분이 어느 결재선으로 올라가는지(필요승인단계)는 domain/approval.ts 가 정한다.
- * 여기서는 "지금 이 사람이 누르는 승인 버튼이 유효한가" 만 본다.
+ * 사전 승인 절차(요청 → 결재 → 집행)를 없애면서 "지금 이 사람이 누르는 승인 버튼이
+ * 유효한가" 를 물을 자리가 사라졌다. 부르는 곳이 없는 가드를 남겨 두면
+ * 다음 사람이 "승인한도가 아직 동작한다" 고 믿고 그 위에 기능을 얹는다.
+ *
+ * Officer.approvalLimit 컬럼과 domain/approval.ts 는 남겨 두었다 —
+ * 총회가 결재선을 되살리기로 하면 그때 다시 붙일 수 있어야 하기 때문이다.
  */
-export function assertApprovalLimit(me: OfficerContext, amountPhp: number, screen = "승인"): void {
-  if (!me.can("승인권")) {
-    throw new GuardError("NO_PERMISSION", `${screen} — "승인권" 권한이 필요합니다.`, 403, null);
-  }
-  if (amountPhp > me.approvalLimit) {
-    throw new GuardError(
-      "OVER_LIMIT",
-      `승인한도를 초과합니다. 요청 ₱${amountPhp.toLocaleString("en-PH")} > 한도 ₱${me.approvalLimit.toLocaleString("en-PH")}.`,
-      403,
-      "상위 결재선(회장 → 이사회)으로 올려야 합니다. 승인한도표(03_거버넌스문서)를 따르십시오.",
-    );
-  }
-}
 
 /**
  * 이해상충 회피(recusal) 강제.

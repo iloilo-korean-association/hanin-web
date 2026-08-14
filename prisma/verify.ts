@@ -23,7 +23,7 @@ import {
   publicPolicyFrom,
   cfgNum,
   cashThresholdFrom,
-  decideApprovalRoute,
+  needsReview,
   approvalConfigFrom,
   checkApprovalTrail,
   type AccountRow,
@@ -89,16 +89,41 @@ async function main(): Promise<void> {
   const opening = checkOpeningBalance(accountRows, prior?.closingTotalPhp ?? null);
   check("I6 개시잔액 = 전기 마감", opening.ok, opening.message);
 
-  /* ── I2: seq 가 DB 에서도 1..N 연속인가 ─────────────────────────── */
-  const seqs = txs.map((t) => t.seq).sort((a, b) => a - b);
-  const seqOk = seqs.every((s, i) => s === i + 1);
-  check("I2 seq 연속 (DB)", seqOk, `1..${seqs.length}`);
-
-  const counter = await prisma.receiptSequence.findUnique({ where: { fiscalYear: FY } });
+  /* ── I2: seq 가 DB 에서도 1..N 연속인가 ───────────────────────────
+     ★ **회계연도별로** 본다. 채번 카운터(ReceiptSequence)도 연도별이고
+       스키마 제약도 @@unique([fiscalYear, seq]) 이다.
+       전체를 한 줄로 이어 세면 장부에 여러 해가 들어온 순간 반드시 실패한다
+       (실제로 2021~2026 을 임포트한 뒤 그렇게 됐다). 검사 쪽이 틀렸던 것이다. */
+  const counters = await prisma.receiptSequence.findMany({ orderBy: { fiscalYear: "asc" } });
+  const seqByFy = new Map<number, number[]>();
+  for (const t of txs) {
+    const list = seqByFy.get(t.fiscalYear) ?? [];
+    list.push(t.seq);
+    seqByFy.set(t.fiscalYear, list);
+  }
+  const gapYears: string[] = [];
+  for (const [year, list] of [...seqByFy].sort((a, b) => a[0] - b[0])) {
+    const sorted = [...list].sort((a, b) => a - b);
+    if (!sorted.every((s, i) => s === i + 1)) gapYears.push(`${year}(1..${sorted.length} 아님)`);
+  }
   check(
-    "I2 채번 카운터 = 발행 건수",
-    counter?.lastSeq === txs.length,
-    `카운터 ${counter?.lastSeq ?? "없음"} vs 거래 ${txs.length}`,
+    "I2 seq 연도별 연속 (DB)",
+    gapYears.length === 0,
+    gapYears.length ? gapYears.join(" ") : [...seqByFy].sort((a, b) => a[0] - b[0]).map(([y, l]) => `${y}:${l.length}`).join(" "),
+  );
+
+  const badCounter = [...seqByFy]
+    .map(([year, list]) => {
+      const c = counters.find((x) => x.fiscalYear === year);
+      return { year, counted: list.length, counter: c?.lastSeq ?? null };
+    })
+    .filter((x) => x.counter !== x.counted);
+  check(
+    "I2 채번 카운터 = 연도별 발행 건수",
+    badCounter.length === 0,
+    badCounter.length
+      ? badCounter.map((x) => `${x.year}: 카운터 ${x.counter ?? "없음"} vs 거래 ${x.counted}`).join(" / ")
+      : counters.map((c) => `${c.fiscalYear}:${c.lastSeq}`).join(" "),
   );
 
   /* ── I3/I4: 저장된 status 가 도메인 판정과 일치하는가 ───────────── */
@@ -129,40 +154,58 @@ async function main(): Promise<void> {
   const closedYearTx = txs.filter((t) => isFyClosedIn(t.fiscalYear, years));
   check("I5 마감 연도 거래 없음", closedYearTx.length === 0, `${closedYearTx.length}건`);
 
-  /* ── 지출 승인: 3,000 초과 POSTED 지출에 승인이 붙어 있는가 ─────── */
-  const soleLimit = cfgNum(settings, "승인한도.총무", 3000);
-  const apMap = new Map(approvals.map((a) => [a.approvalId, a]));
-  // 내부이체(자기 계좌 간 이동)는 지출이 아니다 — 승인한도표의 대상이 아니다.
-  const unapproved = txs.filter(
-    (t) =>
-      t.direction === "OUT" &&
-      t.status === "POSTED" &&
-      t.counterpartyType !== "내부이체" &&
-      t.amountPhp > soleLimit &&
-      !t.approvalId,
-  );
-  check(`전결 한도(${soleLimit}) 초과 지출에 승인 있음`, unapproved.length === 0, unapproved.length ? unapproved.map((t) => `${t.receiptNo}:${t.amountPhp}`).join(",") : "전 건 승인 있음");
+  /* ── 사전 승인 → 사후 감사 확인 ──────────────────────────────────
+     2026-08-14 에 사전 승인 절차를 없앴다. 그래서 아래 4개 검사를 걷어냈다:
+       · 전결 한도 초과 지출에 승인 있음
+       · 집행완료 승인의 결재 흔적 정상
+       · 필요승인단계 = 재계산값
+       · 이해관계자 지출 = 2단계 승인 완료
+     전부 "승인이 있었는가" 를 묻는 것인데, 이제 승인 자체가 없다.
+     통과할 리 없는 검사를 남겨 두면 검산 전체가 빨간색이 되어 아무도 안 보게 된다.
+
+     ★ 그렇다고 검사 자리를 비우지 않는다. 같은 위험(누가 혼자 큰 돈을 썼는가)을
+       **감사 확인 기준으로** 다시 묻는다. 아래 3개가 그 대체물이다. */
 
   const cfg = approvalConfigFrom(settings);
+  void cfg;
+  const flagCfg = {
+    cashThreshold,
+    largeAmount: cfgNum(settings, "감사확인_고액기준", 30000),
+  };
+
+  // ① 옛 결재 이력이 남아 있다면 그 흔적 자체는 여전히 정합해야 한다(과거 감사 자료다).
   const badTrail = approvals
     .filter((a) => a.finalStatus === "집행완료")
     .map((a) => ({ a, r: checkApprovalTrail({ approvalId: a.approvalId, amountPhp: a.amountPhp, relatedParty: a.relatedParty, requiredStages: a.requiredStages, approver1: a.approver1, result1: a.result1, approver2: a.approver2, result2: a.result2, finalStatus: a.finalStatus, quoteUrl: a.quoteUrl }, cfg) }))
     .filter((x) => !x.r.ok);
-  check("집행완료 승인의 결재 흔적 정상", badTrail.length === 0, badTrail.length ? badTrail.map((x) => `${x.a.approvalId}: ${x.r.ok ? "" : x.r.reason}`).join(" / ") : `${approvals.filter((a) => a.finalStatus === "집행완료").length}건 검증`);
+  check("(과거) 집행완료 승인의 결재 흔적 정상", badTrail.length === 0, badTrail.length ? badTrail.map((x) => `${x.a.approvalId}: ${x.r.ok ? "" : x.r.reason}`).join(" / ") : `${approvals.filter((a) => a.finalStatus === "집행완료").length}건 검증`);
 
-  const wrongStages = approvals.filter(
-    (a) => a.requiredStages !== decideApprovalRoute(a.amountPhp, a.relatedParty, cfg).requiredStages,
+  // ② 이해관계자 지출은 금액과 무관하게 전건이 공개 배지로 드러나야 한다.
+  //    예전에는 2단계 결재가 방어였지만, 실제로 공격을 막은 것은 결재 버튼이 아니라 공시였다.
+  const rpNoBadge = txs.filter(
+    (t) => t.relatedParty && t.status === "POSTED" && t.direction === "OUT" && t.counterpartyName.trim() === "",
   );
-  check("필요승인단계 = 재계산값", wrongStages.length === 0, wrongStages.length ? wrongStages.map((a) => a.approvalId).join(",") : `${approvals.length}건 일치`);
+  check(
+    "이해관계자 지출 전건에 수취인 표기 있음(공개 배지 전제)",
+    rpNoBadge.length === 0,
+    rpNoBadge.length ? rpNoBadge.map((t) => t.receiptNo).join(",") : `${txs.filter((t) => t.relatedParty && t.status === "POSTED" && t.direction === "OUT").length}건 검증`,
+  );
 
-  /* ── 이해관계자 거래에 2단계 승인이 실제로 있는가 ───────────────── */
-  const rpBad = txs
-    .filter((t) => t.relatedParty && t.status === "POSTED" && t.direction === "OUT")
-    .filter((t) => {
-      const a = t.approvalId ? apMap.get(t.approvalId) : undefined;
-      return !a || a.requiredStages !== 2 || a.result1 !== "승인" || a.result2 !== "승인";
-    });
-  check("이해관계자 지출 = 2단계 승인 완료", rpBad.length === 0, rpBad.length ? rpBad.map((t) => t.receiptNo).join(",") : `${txs.filter((t) => t.relatedParty && t.status === "POSTED").length}건 검증`);
+  // ③ 감사 확인 큐 — 미확인 건수가 몇 건인지 **숫자로 남긴다.**
+  //    이건 통과/실패가 아니라 관측값이다. 0 을 강제하면 방금 적은 거래 때문에 늘 실패한다.
+  const pending = txs.filter((t) => needsReview(t, flagCfg));
+  const pendingLarge = pending.filter((t) => t.direction === "OUT" && t.amountPhp > flagCfg.largeAmount);
+  check(
+    `감사 미확인 ${pending.length}건 (그중 고액 지출 ${pendingLarge.length}건)`,
+    true,
+    pendingLarge.length ? `고액 미확인: ${pendingLarge.slice(0, 5).map((t) => `${t.receiptNo}:${t.amountPhp}`).join(",")}` : "고액 미확인 없음",
+  );
+
+  // ④ 본인이 적고 본인이 확인한 거래가 있으면 안 된다. 서버가 막지만 데이터로 한 번 더 본다.
+  const selfReviewed = txs.filter(
+    (t) => t.reviewedBy && t.reviewedBy.trim().toLowerCase() === t.enteredBy.trim().toLowerCase(),
+  );
+  check("자기가 적고 자기가 확인한 거래 0건", selfReviewed.length === 0, selfReviewed.length ? selfReviewed.map((t) => t.receiptNo).join(",") : "없음");
 
   /* ── 공개 화면에 회원 실명이 0건인가 ────────────────────────────── */
   const realNames = buildRealNameList(members.map((m) => m.name));

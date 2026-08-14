@@ -33,18 +33,23 @@ import {
   checkReceiptGaps,
   conflictNormalize,
   daysBetween,
+  entryFlags,
   fiscalYearOf,
   isInternalTransfer,
   loadSettings,
   nameLooseMatch,
+  needsReview,
   parseReceiptNo,
   publicPolicyFrom,
+  reviewReasons,
   todayManila,
+  type EntryFlagConfig,
 } from "@/lib/domain";
 import { isGuardError, requireOfficer } from "@/lib/guard";
 import { ROUTES } from "@/lib/site";
 
 import { PrintButton } from "../../_components/PrintButton";
+import { ReviewQueue, type QueueRowUI } from "./ReviewQueue";
 
 export const metadata: Metadata = {
   title: "감사",
@@ -580,6 +585,37 @@ export default async function AuditPage() {
     });
   }
 
+  /* ── 확인 대기 큐 ────────────────────────────────────────────────────
+     사전 승인을 없앤 뒤 이것이 유일한 사후 통제다. 조건 판정은 domain/direct-entry.ts
+     한 곳에만 두고, 장부 화면·감사 화면·공개 장부가 같은 함수를 쓴다. */
+  const flagCfg: EntryFlagConfig = {
+    cashThreshold,
+    largeAmount: cfgNum(settings, "감사확인_고액기준", 30000),
+  };
+  const categoryName = new Map(categories.map((c) => [c.code, c.name]));
+  const queue: QueueRowUI[] = txs
+    .filter((t) => needsReview(t, flagCfg))
+    // 최근 것부터. 오래된 미확인이 아래로 밀리지 않도록 날짜 역순으로만 정렬한다.
+    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.seq - a.seq))
+    .slice(0, 100)
+    .map((t) => ({
+      receiptNo: t.receiptNo,
+      date: t.date,
+      direction: t.direction,
+      amountPhp: t.amountPhp,
+      categoryName: categoryName.get(t.categoryCode) ?? t.categoryCode,
+      counterpartyName: t.counterpartyName,
+      enteredBy: t.enteredBy,
+      flags: entryFlags(t, flagCfg),
+      reasons: reviewReasons(t, flagCfg),
+      isMine: t.enteredBy.trim().toLowerCase() === me.email.trim().toLowerCase(),
+    }));
+
+  const canReview = me.can("확인권");
+  const cannotReviewReason = canReview
+    ? ""
+    : '"확인권" 이 없습니다. 감사·회장에게 이 권한이 있습니다. 열람은 그대로 하실 수 있습니다.';
+
   const critical = findings.filter((f) => f.sev === "CRITICAL");
   const warn = findings.filter((f) => f.sev === "WARN");
   const info = findings.filter((f) => f.sev === "INFO");
@@ -597,11 +633,16 @@ export default async function AuditPage() {
       />
 
       <Stack>
-        <Alert tone="info" title="이 화면은 읽기 전용입니다">
+        {/* ★ 확인 대기 큐 — 이 화면에서 유일하게 버튼이 있는 곳이다.
+            사전 승인 절차를 없앤 대가로 생긴 통제이므로 맨 위에 둔다.
+            찍는 것은 "내가 봤다" 는 기록이지 장부 수정이 아니다(audit/actions.ts). */}
+        <ReviewQueue rows={queue} canReview={canReview} cannotReason={cannotReviewReason} />
+
+        <Alert tone="info" title="아래 검사 결과는 읽기 전용입니다">
           <p>
-            저장·수정 버튼이 하나도 없습니다. 검사는 원장을 다시 읽어 계산할 뿐입니다.
+            검사는 원장을 다시 읽어 계산할 뿐 아무것도 고치지 않습니다.
             {me.isAuditor
-              ? " 지금 감사 계정으로 보고 계십니다 — 수납·지출 화면을 열면 서버가 저장을 거부하는 것을 확인하실 수 있습니다."
+              ? " 지금 감사 계정으로 보고 계십니다 — 장부 화면을 열면 서버가 저장을 거부하는 것을 확인하실 수 있습니다. 위의 확인 도장만 예외입니다."
               : ""}
           </p>
         </Alert>

@@ -64,11 +64,11 @@ export default async function OfficerLoginPage() {
                 시드된 임원 5명의 비밀번호는 <code className="font-mono font-bold">npm run db:reset</code> 실행 시 콘솔에 한 번 출력됩니다. 고정하려면 <code className="font-mono">SEED_PASSWORD</code> 환경변수를 주십시오.
               </p>
               <ul className="mb-4 flex flex-col gap-1 text-sm text-ink-soft">
-                <li>president@ika-iloilo.org — 박정우 회장 (승인권·조회권 / 한도 ₱30,000)</li>
-                <li>vp@ika-iloilo.org — 이서연 부회장 (승인권·조회권 / 한도 ₱10,000)</li>
-                <li>treasurer@ika-iloilo.org — 정도현 총무 (입력권·조회권 / 한도 ₱3,000)</li>
-                <li>auditor@ika-iloilo.org — 최수아 감사 (조회권 / 읽기 전용)</li>
-                <li>auditor2@ika-iloilo.org — 강예린 감사 (승인권·조회권 / 한도 ₱50,000)</li>
+                <li>president@ika-iloilo.org — 박정우 회장 (확인권·조회권)</li>
+                <li>vp@ika-iloilo.org — 이서연 부회장 (조회권 / 읽기 전용)</li>
+                <li>treasurer@ika-iloilo.org — 정도현 총무 (입력권·조회권 / 장부 기재)</li>
+                <li>auditor@ika-iloilo.org — 최수아 감사 (조회권·확인권)</li>
+                <li>auditor2@ika-iloilo.org — 강예린 감사 (조회권·확인권)</li>
               </ul>
               <LinkButton href={ROUTES.devLogin} variant="secondary">
                 비밀번호 없이 계정 전환 (/dev/login)
@@ -79,8 +79,9 @@ export default async function OfficerLoginPage() {
 
         <Alert tone="info" title="로그인해도 할 수 있는 일은 직책마다 다릅니다">
           <p>
-            감사는 어떤 화면에서도 저장할 수 없고, 총무는 결재할 수 없으며, 이해관계가 있는 임원은
-            그 건의 승인 버튼이 잠깁니다. 화면에서 버튼을 숨기는 것이 아니라 서버가 거부합니다.
+            총무는 장부에 적고, 감사는 적힌 것을 확인만 합니다. 감사는 장부를 고칠 수 없고, 총무는
+            자기가 적은 거래를 스스로 확인할 수 없습니다. 화면에서 버튼을 숨기는 것이 아니라 서버가
+            거부합니다.
           </p>
         </Alert>
       </Stack>

@@ -232,7 +232,7 @@ export default async function AboutPage() {
                               .map((p) => p.trim())
                               .filter(Boolean)
                               .map((p) => (
-                                <Badge key={p} tone={p === "승인권" ? "info" : "neutral"}>
+                                <Badge key={p} tone={p === "확인권" ? "info" : "neutral"}>
                                   {p}
                                 </Badge>
                               ))}

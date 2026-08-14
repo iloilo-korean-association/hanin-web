@@ -12,7 +12,7 @@ import {
   zText,
   zVendorId,
 } from "./common";
-import { zCounterpartyType, zCurrency, zPayMethod } from "./enums";
+import { zCounterpartyType, zCurrency, zDirection, zPayMethod } from "./enums";
 
 /**
  * 05_거래 쓰기 경로의 입력 검증.
@@ -67,6 +67,52 @@ export const expenseInputSchema = z.object({
   ackNoEvidence: z.boolean().default(false),
 });
 export type ExpenseInput = z.infer<typeof expenseInputSchema>;
+
+/* ── [추가] 직접 입력 장부 (/officer/book) ─────────────────────────────── */
+
+/**
+ * 장부 한 줄. 수입·지출을 같은 스키마로 받는다.
+ *
+ * 예전 receiptInputSchema / expenseInputSchema 와 다른 점:
+ *   · direction 을 명시한다 (한 화면에서 둘 다 적으므로)
+ *   · approvalId 가 없다 — 사전 승인 절차를 없앴다
+ *   · ackNoEvidence 가 없다 — 증빙이 없어도 확정되고 배지가 붙는다
+ *     (예전에는 "사진 없이 임시로 기록하겠습니다" 를 체크해야 통과했다.
+ *      돈이 실제로 움직인 사실을 사람의 체크박스에 의존해 기록하던 셈이라 없앤다)
+ *
+ * ★ status 는 여기에도 없다. 직접 입력 경로는 서버가 언제나 POSTED 로 적는다.
+ */
+export const bookEntrySchema = z.object({
+  direction: zDirection,
+  date: zDateStr,
+  amount: zAmount,
+  currency: zCurrency.default("PHP"),
+  method: zPayMethod,
+  categoryCode: zCategoryCode,
+  fundId: zFundId,
+  accountId: zAccountId,
+  /** 상대방 — 지출이면 수취인, 수입이면 납부자. ★ 이해상충 판정의 유일한 입력 */
+  counterpartyName: zText(80, "상대방"),
+  counterpartyType: zCounterpartyType.default("비회원"),
+  /** 회원을 특정했으면 함께 보낸다 (회비 대사에 쓰인다) */
+  memberNo: z.string().trim().regex(/^M\d{4,}$/).optional(),
+  /** 매칭된 업소가 있으면 ID */
+  vendorId: zVendorId.optional(),
+  /** 행사 정산에 묶을 때 (Event.settlementReceiptNos 에 붙는다) */
+  eventId: z.string().trim().regex(/^EV\d{2,}$/, "행사ID는 EV01 형식입니다.").optional(),
+  externalRef: zOptText(60),
+  memo: zOptText(200),
+  /** 현금 고액이면 채우기를 권한다. 비어도 저장은 되고 '미확인현금' 배지가 붙는다 */
+  verifiedBy: zEmail.or(z.literal("")).default(""),
+  evidenceUrl: zEvidenceUrl,
+});
+export type BookEntryInput = z.infer<typeof bookEntrySchema>;
+
+/** 이미 적은 줄을 고칠 때. 영수증번호는 바뀌지 않는다(I2). */
+export const bookEditSchema = bookEntrySchema.extend({
+  receiptNo: zReceiptNo,
+});
+export type BookEditInput = z.infer<typeof bookEditSchema>;
 
 /**
  * 무효 처리 (I1).

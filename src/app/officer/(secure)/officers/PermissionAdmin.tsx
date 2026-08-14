@@ -114,19 +114,6 @@ export function PermissionAdmin({
               </fieldset>
 
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field
-                  label="승인한도 (₱)"
-                  htmlFor="approvalLimit"
-                  hint="승인권이 있을 때만 의미가 있습니다. 이 금액까지 단독 승인할 수 있습니다."
-                >
-                  <Input
-                    id="approvalLimit"
-                    name="approvalLimit"
-                    type="number"
-                    inputMode="numeric"
-                    defaultValue={String(editing.approvalLimit)}
-                  />
-                </Field>
                 <Field label="계정 상태" htmlFor="status">
                   <Select id="status" name="status" defaultValue={editing.status}>
                     <option value="ACTIVE">ACTIVE — 로그인 가능</option>
@@ -156,7 +143,7 @@ export function PermissionAdmin({
               <TR>
                 <TH>임원</TH>
                 <TH>권한</TH>
-                <TH numeric>승인한도</TH>
+                <TH numeric>옛 승인한도</TH>
                 <TH>상태</TH>
                 {canEdit ? <TH>관리</TH> : null}
               </TR>
@@ -195,7 +182,17 @@ export function PermissionAdmin({
                       )}
                     </div>
                   </TD>
-                  <TD numeric>{o.approvalLimit > 0 ? formatPeso(o.approvalLimit) : "—"}</TD>
+                  {/* 옛 승인한도. 지금은 아무것도 막지 않으므로 회색으로 흐려 둔다 —
+                      지우면 총회가 결재선을 되살릴 때 출발점이 사라진다. */}
+                  <TD numeric>
+                    {o.approvalLimit > 0 ? (
+                      <span className="text-ink-faint line-through" title="사전 승인 제도를 없애면서 효력이 사라진 값입니다.">
+                        {formatPeso(o.approvalLimit)}
+                      </span>
+                    ) : (
+                      "—"
+                    )}
+                  </TD>
                   <TD>
                     {o.status === "ACTIVE" ? (
                       <Badge tone="success">활성</Badge>

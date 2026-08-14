@@ -12,6 +12,9 @@
 export * from "./money";
 export * from "./normalize";
 export * from "./invariants";
+// 직접 입력 장부(/officer/book)의 배지·감사큐 규칙.
+// invariants.ts 의 evaluateTxState 와 **일부러 다른 규칙**이다 — 이유는 파일 머리말 참조.
+export * from "./direct-entry";
 export * from "./conflict";
 export * from "./approval";
 export * from "./ledger";

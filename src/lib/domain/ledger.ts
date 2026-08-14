@@ -2,6 +2,7 @@ import { toInt, monthsOfYear, monthOf } from "./money";
 import { maskRealNames, publicPayee } from "./normalize";
 import type { PayeePolicy } from "../validators/enums";
 import { checkReceiptGaps, parseReceiptNo, type GapCheck } from "./invariants";
+import { wasEdited } from "./direct-entry";
 
 /**
  * 장부 집계 — 계좌·기금 잔액과 공개 회계.
@@ -38,6 +39,13 @@ export type TxRow = {
   voidReason: string;
   fiscalYear: number;
   seq: number;
+  /**
+   * [추가] 사전 승인을 없앤 뒤 생긴 두 값. 없으면 옛 데이터로 보고 조용히 넘어간다
+   * (임포트·테스트가 이 필드를 안 채우고 부르는 경로가 있다).
+   */
+  enteredAt?: Date | string | null;
+  updatedAt?: Date | string | null;
+  reviewedAt?: Date | string | null;
 };
 
 export type AccountRow = {
@@ -190,6 +198,16 @@ export type PublicExpenseRow = {
   relatedParty: boolean;
   voided: boolean;
   voidReason: string;
+  /**
+   * 감사가 확인 도장을 찍었는가 (Transaction.reviewedAt).
+   *
+   * ★ 사전 승인을 없앤 뒤로 **이것이 공개 장부에서 가장 중요한 한 칸**이다.
+   *   예전에는 "지출이 여기 있다 = 결재를 거쳤다" 였다. 이제는 아니다.
+   *   그래서 거쳤는지 여부를 밖에서 볼 수 있게 그대로 내보낸다.
+   */
+  reviewed: boolean;
+  /** 처음 적은 뒤에 내용이 바뀐 적이 있는가. 공개한 숫자가 사후에 바뀌면 밖에서 알아야 한다. */
+  edited: boolean;
   /**
    * 내부이체 — 한인회 자기 계좌 사이의 돈 이동(현금함 → 통장 등).
    * ★ 목록에는 남기되 총수입·총지출에는 넣지 않는다. 넣으면 같은 돈이 수입에도 지출에도 잡혀
@@ -367,6 +385,8 @@ export function buildPublicLedger(
             : String(t.voidReason ?? "")
           : "",
       internalTransfer: internal,
+      reviewed: !!t.reviewedAt,
+      edited: wasEdited(t),
     });
   }
 

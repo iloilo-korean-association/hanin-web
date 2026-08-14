@@ -51,25 +51,16 @@ export default async function SecureOfficerLayout({ children }: { children: Reac
 
   const tabs: OfficerTab[] = [
     { href: ROUTES.officer, label: "대시보드", blocked: null },
+    // 장부 — 수입·지출을 한 화면에서 직접 적는다.
+    // 예전의 '수납' + '지출 요청' + '승인·집행' 세 탭이 여기 하나로 합쳐졌다.
     {
-      href: `${ROUTES.officer}/receipt`,
-      label: "수납",
+      href: `${ROUTES.officer}/book`,
+      label: "장부",
       blocked: writeBlocked ?? (me.can("입력권") ? null : "입력권이 없는 직책입니다."),
-    },
-    {
-      href: `${ROUTES.officer}/expense`,
-      label: "지출 요청",
-      blocked: writeBlocked ?? (me.can("입력권") ? null : "입력권이 없는 직책입니다."),
-    },
-    {
-      href: `${ROUTES.officer}/approve`,
-      label: "승인 · 집행",
-      blocked:
-        me.can("승인권") || me.can("입력권")
-          ? null
-          : "승인권 또는 입력권이 필요합니다(감사는 조회권만 가집니다).",
     },
     { href: `${ROUTES.officer}/audit`, label: "감사", blocked: null },
+    // 승인 이력 — 사전 승인 제도를 쓰던 시기의 결재 기록. 열람만 된다.
+    { href: `${ROUTES.officer}/approve`, label: "승인 이력", blocked: null },
 
     // 장부 가져오기 (L3/L4) — 실장부 엑셀을 웹 장부로 옮기는 통로.
     // 목록·대조표는 조회권만 있으면 열리고, 업로드·반영·연결만 입력권이 막는다.
