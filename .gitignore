@@ -37,6 +37,7 @@ next-env.d.ts
 *.xlsx
 *.xls
 *.csv
+*.docx
 
 # OS / 편집기
 .DS_Store

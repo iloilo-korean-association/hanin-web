@@ -104,7 +104,14 @@ export default async function ServicesPage() {
                       }
                     />
                     <CardBody>
-                      {s.description ? <p className="text-ink-soft">{s.description}</p> : null}
+                      {/*
+                        whitespace-pre-line: 임원이 설명을 여러 줄로(불릿으로) 적는다.
+                        HTML 은 줄바꿈을 공백으로 뭉개므로 이게 없으면 "- 관광비자 연장 - ECC - 워킹비자…"
+                        처럼 한 줄로 붙어 나온다 — 적은 사람이 의도한 모양이 아니다.
+                      */}
+                      {s.description ? (
+                        <p className="whitespace-pre-line text-ink-soft">{s.description}</p>
+                      ) : null}
                       {s.howToApply ? (
                         <p className="mt-3 text-sm text-ink-soft">
                           <b className="text-ink">신청 방법</b> — {s.howToApply}
