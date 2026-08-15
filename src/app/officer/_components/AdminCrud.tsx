@@ -99,6 +99,7 @@ export function AdminCrud<T extends Record<string, unknown>>({
     IDLE,
   );
   const formRef = useRef<HTMLFormElement>(null);
+  const formTopRef = useRef<HTMLDivElement>(null);
   const lastAt = useRef(0);
 
   // 저장에 성공하면 폼을 닫는다. 실패하면 열어둔 채 사유를 보여준다.
@@ -112,6 +113,21 @@ export function AdminCrud<T extends Record<string, unknown>>({
       }
     }
   }, [saveState]);
+
+  /**
+   * [수정] 은 페이지를 이동하지 않는다 — 목록 **위쪽**에 폼을 연다.
+   *
+   * 목록이 길어지면(서비스 18건) 표 아래쪽에서 [수정] 을 눌렀을 때 폼이 화면 밖에서 열려
+   * "버튼이 안 먹는다" 로 보인다. 실제로 그 신고가 들어왔다.
+   * 그래서 열릴 때 폼으로 스크롤하고 첫 칸에 포커스를 준다(키보드 사용자도 폼으로 이동한다).
+   */
+  useEffect(() => {
+    if (!open) return;
+    formTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    formRef.current
+      ?.querySelector<HTMLElement>("input:not([type=hidden]), textarea, select")
+      ?.focus({ preventScroll: true });
+  }, [open, editing]);
 
   const startNew = () => {
     setEditing(null);
@@ -149,6 +165,9 @@ export function AdminCrud<T extends Record<string, unknown>>({
 
       {/* ── 편집 폼 ─────────────────────────────────────────── */}
       {open && !readOnly ? (
+        <>
+          {/* 스크롤 목적지. Card 는 ref 를 받지 않아 앵커를 따로 둔다. */}
+          <div ref={formTopRef} className="scroll-mt-4" />
         <Card as="section">
           <CardHeader
             title={editing ? `수정 — ${String(editing[idKey])}` : "새로 등록"}
@@ -156,7 +175,12 @@ export function AdminCrud<T extends Record<string, unknown>>({
           />
           <CardBody>
             {formNote}
-            <form ref={formRef} action={save}>
+            {/*
+              key: 폼이 열려 있는 채로 다른 행의 [수정] 을 누르면 React 가 같은 input 을 재사용해서
+              defaultValue 가 갱신되지 않는다 — 앞 행의 값이 그대로 남는다.
+              행이 바뀔 때마다 폼을 새로 마운트해서 그 행의 값이 채워지게 한다.
+            */}
+            <form key={editing ? String(editing[idKey]) : "new"} ref={formRef} action={save}>
               <input type="hidden" name={idKey} value={editing ? String(editing[idKey]) : ""} />
               <FormStack>
                 {fields.map((f) => {
@@ -236,6 +260,7 @@ export function AdminCrud<T extends Record<string, unknown>>({
             </form>
           </CardBody>
         </Card>
+        </>
       ) : null}
 
       {/* ── 목록 ────────────────────────────────────────────── */}
