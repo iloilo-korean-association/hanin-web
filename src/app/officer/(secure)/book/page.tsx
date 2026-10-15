@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import {
   cashThresholdFrom,
   cfgNum,
+  cfgStr,
   entryFlags,
   loadSettings,
   monthOf,
@@ -97,6 +98,8 @@ export default async function BookPage() {
     members: members.filter((m) => !/^M9\d{3}$/.test(m.memberNo)),
     today,
     cashThreshold: flagCfg.cashThreshold,
+    // 회비 과목 — 회원 미연결 경고에 쓴다. 서버 액션(prepare)과 같은 설정·같은 기본값.
+    duesCategory: cfgStr(settings, "기본.과목코드.회비", "R100"),
   };
 
   const ui: BookRowUI[] = rows.map((t) => ({

@@ -6,6 +6,8 @@ import { prisma } from "@/lib/db";
 import {
   assertFyOpen,
   cfgStr,
+  duesNeedsMember,
+  duesRecategorizeBlocked,
   evaluateConflict,
   formatMoney,
   fxTableFrom,
@@ -149,6 +151,16 @@ export async function addEntryAction(_prev: ActionState, fd: FormData): Promise<
 
     const prep = await prepare(input.currency, input.amount);
     if (isActionState(prep)) return prep;
+
+    /* ── 회비는 회원을 연결해야 받는다 ──
+       이름만 적힌 회비는 06_회비고지에 반영되지 않는다. 돈은 냈는데 미납·회원증 미발급으로
+       남고, 감사 C7 회비 대사도 어긋난다. 화면 경고는 JS 가 꺼지면 사라지므로 여기서 막는다. */
+    if (duesNeedsMember(input, prep.duesCategory)) {
+      return fail(
+        "회비는 납부한 회원을 연결해야 합니다.",
+        "상대방 칸에 이름을 치면 나오는 목록에서 회원을 골라 주십시오. 아직 회원이 아니면 먼저 회원 등록을 해 주십시오.",
+      );
+    }
 
     // 이해상충은 지출에서만 본다. 회비를 낸 사람이 이해관계자인 것은 문제가 아니다.
     const verdict =
@@ -370,6 +382,15 @@ export async function editEntryAction(_prev: ActionState, fd: FormData): Promise
       const want = input.direction === "IN" ? "수입" : "지출";
       if (category.majorType !== want) {
         throw new Error(`"${category.name}" 은 ${category.majorType} 과목입니다.`);
+      }
+
+      // 다른 과목 → 회비로 바꾸는데 회원이 연결돼 있지 않으면 막는다.
+      // 수정 화면은 회원 연결을 바꾸지 못하므로, 여기서 통과시키면 회원 없는 회비가 생긴다.
+      // (원래부터 회비였던 줄의 메모·날짜 수정은 막지 않는다)
+      if (duesRecategorizeBlocked(before, category.code, prep.duesCategory)) {
+        throw new Error(
+          "회비는 납부한 회원을 연결해야 합니다. 수정으로는 회원을 연결할 수 없으니, 이 줄을 무효 처리한 뒤 상대방 목록에서 회원을 골라 새로 적어 주십시오.",
+        );
       }
 
       // 회비 수납은 06_회비고지.납부금액에 이미 반영돼 있다. 금액을 여기서 고치면 대사가 깨진다.

@@ -25,7 +25,13 @@ import {
   Textarea,
   formatPeso,
 } from "@/components/ui";
-import { accountForMethod, ENTRY_FLAG_HELP, type EntryFlag } from "@/lib/domain/direct-entry";
+import {
+  accountForMethod,
+  duesNeedsMember,
+  ENTRY_FLAG_HELP,
+  memberByExactName,
+  type EntryFlag,
+} from "@/lib/domain/direct-entry";
 
 import { IDLE } from "../../_lib/action-state";
 import { addEntryAction, editEntryAction, voidEntryAction } from "./actions";
@@ -40,6 +46,8 @@ export type MasterData = {
   members: { memberNo: string; name: string }[];
   today: string;
   cashThreshold: number;
+  /** 회비 과목코드 (설정 '기본.과목코드.회비'). 회비인데 회원 미연결이면 경고한다 — 서버도 거부한다. */
+  duesCategory: string;
 };
 
 export type BookRowUI = {
@@ -87,7 +95,8 @@ const FLAG_TONE: Record<EntryFlag, "warn" | "danger" | "neutral"> = {
 };
 
 const MEMBER_LIST_ID = "book-member-options";
-const NO_PAYEE = { name: "", memberNo: "" };
+/** auto = 목록에서 고르지 않았지만 이름이 정확히 같은 회원이 한 명뿐이라 자동으로 연결한 경우 */
+const NO_PAYEE = { name: "", memberNo: "", auto: false };
 
 /** 회원 선택지 문구 = datalist 의 value. 동명이인을 가르려고 회원번호를 붙인다. */
 function memberOption(m: { memberNo: string; name: string }): string {
@@ -160,11 +169,34 @@ export function BookEntry({
     setAccountId(accountForMethod(next, master.accounts, accountId));
   }
 
-  /** 목록에서 고르면 "박정우 · M0001" 이 들어온다 → 칸에는 이름만 남기고 번호는 숨은 칸으로. 그 밖의 입력은 회원 연결을 끊는다. */
+  /**
+   * 목록에서 고르면 "박정우 · M0001" 이 들어온다 → 칸에는 이름만 남기고 번호는 숨은 칸으로.
+   * 목록을 안 고르고 이름만 쳤어도, 그 이름과 **정확히 같은** 회원이 **딱 한 명**이면 자동으로 연결한다
+   * (목록을 안 고르고 이름만 쳐서 회비가 비회원으로 저장된 일이 실제로 있었다).
+   * ★ 동명이인이 둘 이상이면 연결하지 않는다 — 누구의 돈인지는 사람이 회원번호를 보고 골라야 한다.
+   * 그 밖의 입력은 회원 연결을 끊는다.
+   */
   function typePayee(value: string) {
-    const m = memberByOption.get(value);
-    setPayee(m ? { name: m.name, memberNo: m.memberNo } : { name: value, memberNo: "" });
+    const picked = memberByOption.get(value);
+    if (picked) {
+      setPayee({ name: picked.name, memberNo: picked.memberNo, auto: false });
+      return;
+    }
+    const { match } = memberByExactName(value, master.members);
+    setPayee(
+      match
+        ? { name: value, memberNo: match.memberNo, auto: true }
+        : { name: value, memberNo: "", auto: false },
+    );
   }
+
+  /** 연결이 안 된 채 친 이름과 같은 이름의 회원 수. 2 이상이면 동명이인이라 자동 연결하지 않은 것이다. */
+  const sameNameCount = payee.memberNo ? 0 : memberByExactName(payee.name, master.members).sameNameCount;
+  /** 회비인데 회원이 연결되지 않았다 — 이대로 적으면 서버가 거부한다(addEntryAction 과 같은 함수). */
+  const duesUnlinked = duesNeedsMember(
+    { direction, categoryCode, memberNo: payee.memberNo },
+    master.duesCategory,
+  );
 
   /**
    * 연속 입력의 핵심 — 상대방·금액·메모만 비우고 커서를 상대방으로 돌린다.
@@ -294,6 +326,21 @@ export function BookEntry({
                   {payee.memberNo ? (
                     <p role="status" className="text-sm font-semibold text-success">
                       회원 {payee.memberNo} 연결됨
+                      {payee.auto ? (
+                        <span className="font-normal"> (같은 이름의 회원이 한 분뿐이라 자동으로 연결했습니다)</span>
+                      ) : null}
+                    </p>
+                  ) : null}
+                  {duesUnlinked ? (
+                    <p role="alert" className="text-sm font-semibold text-danger">
+                      회비는 납부한 회원을 연결해야 적을 수 있습니다. 이름을 치면 나오는 목록에서
+                      회원을 골라 주십시오. 아직 회원이 아니면 먼저 회원 등록을 해 주십시오.
+                    </p>
+                  ) : null}
+                  {sameNameCount > 1 ? (
+                    <p className="text-sm text-ink-muted">
+                      같은 이름의 회원이 {sameNameCount}명이라 자동으로 연결하지 않았습니다. 회원 납부라면
+                      목록에서 회원번호를 보고 골라 주십시오.
                     </p>
                   ) : null}
                 </Field>

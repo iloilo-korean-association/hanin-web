@@ -206,3 +206,51 @@ export function accountForMethod(
 /** 연속 입력에서 유지할 값과 비울 값. 화면이 이 목록을 그대로 따른다. */
 export const STICKY_FIELDS = ["direction", "date", "categoryCode", "fundId", "method", "accountId"] as const;
 export const CLEARED_FIELDS = ["counterpartyName", "amount", "memo", "externalRef", "eventId"] as const;
+
+/* ════════════════════════════════════════════════════════════════════════
+ * 회비 수납의 회원 연결 — 이름만 적힌 회비를 막는다
+ *
+ * 회비를 회원 연결 없이(상대방회원번호 없이) 적으면 06_회비고지에 반영되지 않는다.
+ * 돈은 냈는데 미납으로 남고 회원증도 안 나온다(실제로 있었다: 상대방 칸에 이름만 치고
+ * 목록을 고르지 않아 비회원으로 저장된 회비). 서버(book/actions.ts)와 화면(BookEntry.tsx)이
+ * 아래 같은 함수로 판정한다 — 화면 경고와 서버 거부가 어긋나지 않게.
+ * ════════════════════════════════════════════════════════════════════════ */
+
+/** 회비 수납인데 회원이 연결되지 않았는가. true 면 적지 않는다(addEntryAction). */
+export function duesNeedsMember(
+  entry: { direction: string; categoryCode: string; memberNo?: string | null },
+  duesCategory: string,
+): boolean {
+  return entry.direction === "IN" && entry.categoryCode === duesCategory && !entry.memberNo;
+}
+
+/**
+ * 수정으로 다른 과목 → 회비 과목으로 바꾸는데 원래 줄에 회원이 없는가. true 면 막는다(editEntryAction).
+ * 수정 화면은 회원 연결을 바꾸지 못하기 때문이다. 원래부터 회비였던 줄(메모·날짜 수정 등)은 막지 않는다.
+ */
+export function duesRecategorizeBlocked(
+  before: { categoryCode: string; counterpartyMemberNo: string | null },
+  nextCategoryCode: string,
+  duesCategory: string,
+): boolean {
+  return (
+    nextCategoryCode === duesCategory &&
+    before.categoryCode !== duesCategory &&
+    !before.counterpartyMemberNo
+  );
+}
+
+/**
+ * 상대방 칸에 친 이름과 **정확히 같은** 이름의 회원. 딱 한 명일 때만 match 를 준다.
+ * ★ 동명이인이 둘 이상이면 match=null — 누구의 돈인지는 사람이 회원번호를 보고 골라야 한다.
+ *   sameNameCount 로 동명이인 수를 알려 준다(화면 안내용).
+ */
+export function memberByExactName<M extends { memberNo: string; name: string }>(
+  typed: string,
+  members: readonly M[],
+): { match: M | null; sameNameCount: number } {
+  const key = String(typed ?? "").trim();
+  if (!key) return { match: null, sameNameCount: 0 };
+  const same = members.filter((m) => m.name.trim() === key);
+  return { match: same.length === 1 ? same[0] : null, sameNameCount: same.length };
+}
