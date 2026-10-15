@@ -5,7 +5,7 @@ import { z } from "zod";
 
 import type { Tx } from "@/lib/db";
 import { prisma } from "@/lib/db";
-import { newLinkToken, todayManila } from "@/lib/domain";
+import { newLinkToken, nextInvoiceId, todayManila } from "@/lib/domain";
 import { requireOfficer } from "@/lib/guard";
 import { ROUTES } from "@/lib/site";
 import { zMemberNo } from "@/lib/validators";
@@ -396,15 +396,5 @@ async function freshLinkToken(tx: Tx): Promise<string> {
   throw new Error("링크토큰을 만들지 못했습니다(6회 연속 충돌).");
 }
 
-async function nextInvoiceId(tx: Tx, fiscalYear: number): Promise<string> {
-  const rows = await tx.duesInvoice.findMany({
-    where: { fiscalYear },
-    select: { invoiceId: true },
-  });
-  let max = 0;
-  for (const r of rows) {
-    const n = Number(r.invoiceId.split("-").pop() ?? "");
-    if (Number.isFinite(n) && n > max) max = n;
-  }
-  return `DU-${fiscalYear}-${String(max + 1).padStart(4, "0")}`;
-}
+/* 고지ID(DU-2026-0001) 채번 nextInvoiceId 는 lib/domain/dues.ts 에 있다 —
+   가입(join)·회비고지 일괄 생성(officer/dues)과 같은 규칙을 한 곳에서 쓴다. */

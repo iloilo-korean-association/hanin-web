@@ -13,6 +13,7 @@ import {
   loadSettings,
   newLinkToken,
   memberLinkPath,
+  nextInvoiceId,
   phoneLast4,
   todayManila,
   FALLBACK_TEMPLATES,
@@ -369,20 +370,8 @@ async function nextMemberNo(tx: Tx): Promise<string> {
   return "M" + String(max + 1).padStart(4, "0");
 }
 
-/** 06_회비고지 DU-2026-0001 */
-async function nextInvoiceId(tx: Tx, fiscalYear: number): Promise<string> {
-  const rows = await tx.duesInvoice.findMany({
-    where: { fiscalYear },
-    select: { invoiceId: true },
-  });
-  let max = 0;
-  for (const r of rows) {
-    const tail = r.invoiceId.split("-").pop() ?? "";
-    const n = Number(tail);
-    if (Number.isFinite(n) && n > max) max = n;
-  }
-  return `DU-${fiscalYear}-${String(max + 1).padStart(4, "0")}`;
-}
+/* 06_회비고지 DU-2026-0001 — nextInvoiceId 는 lib/domain/dues.ts 로 옮겼다.
+   납부자 연결(ledger-import/link)·회비고지 일괄 생성(officer/dues)과 같은 규칙을 한 곳에서 쓴다. */
 
 /** 겹치지 않는 링크토큰. 31^8 이라 충돌은 사실상 없지만 확인은 한다. */
 async function freshLinkToken(tx: Tx): Promise<string> {

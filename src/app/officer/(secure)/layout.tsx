@@ -77,6 +77,14 @@ export default async function SecureOfficerLayout({ children }: { children: Reac
       blocked: me.can("조회권") ? null : '"조회권"이 없는 직책입니다.',
     },
 
+    // 회비고지 — 그 해 고지가 없는 활동 회원에게 연 1회 고지를 한 번에 만든다.
+    // 미리보기는 조회권으로 열리고, 생성 버튼만 입력권이 막는다.
+    {
+      href: `${ROUTES.officer}/dues`,
+      label: "회비고지",
+      blocked: writeBlocked ?? (me.can("입력권") ? null : "입력권이 없는 직책입니다."),
+    },
+
     // ── 자료 관리 ──────────────────────────────────────────────────
     // 권한이 없어도 탭은 보인다. 목록은 열리고 편집만 잠긴다 —
     // 숨기면 "내 권한이 어디까지인지" 를 본인도 확인할 수 없다.

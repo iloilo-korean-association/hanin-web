@@ -3,7 +3,7 @@
  *
  *   import { evaluateTxState, buildPublicLedger, evaluateConflict } from "@/lib/domain";
  *
- * 이 폴더의 함수는 (nextReceiptNo · isFyClosed · assertFyOpen · loadSettings 를 뺀) 전부
+ * 이 폴더의 함수는 (nextReceiptNo · nextInvoiceId · isFyClosed · assertFyOpen · loadSettings 를 뺀) 전부
  * **순수 함수**다. DB 를 모르고, 행 배열만 받아 계산한다. 그래서 테스트할 수 있다.
  *
  * 원본은 02_노코드MVP/AppsScript/ 의 12개 .gs 다. 이미 실전에서 검증된 로직이므로
@@ -20,6 +20,8 @@ export * from "./approval";
 export * from "./ledger";
 export * from "./memberPayments";
 export * from "./memberCard";
+// 06_회비고지 연 1회 일괄 고지 계획 + 고지ID 채번(가입·납부자 연결·일괄 고지가 같이 쓴다).
+export * from "./dues";
 export * from "./settings";
 export * from "./mail";
 // 장부 임포트 반영 규칙(L3). 파서(importXlsx.ts)는 exceljs 를 끌고 오므로 여기 넣지 않는다 —

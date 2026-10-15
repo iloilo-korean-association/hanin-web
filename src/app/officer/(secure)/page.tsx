@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import {
   Alert,
@@ -30,9 +31,11 @@ import {
   buildPublicLedger,
   buildRealNameList,
   cashThresholdFrom,
+  cfgNum,
   checkOpeningBalance,
   evaluateTxState,
   fiscalYearOf,
+  isSystemMemberNo,
   loadSettings,
   publicPolicyFrom,
   todayManila,
@@ -79,6 +82,16 @@ export default async function OfficerDashboardPage() {
   const settings = await loadSettings(prisma);
   const policy = publicPolicyFrom(settings);
   const cashThreshold = cashThresholdFrom(settings);
+
+  // 회비고지가 없는 활동 회원 — 회원증 판정과 같은 기준(설정 '회계연도')으로 센다.
+  // 고지가 없으면 회비를 내도 회원증이 나오지 않고, 아래 '회비 미납' 집계에도 잡히지 않는다.
+  const duesFy = cfgNum(settings, "회계연도", fy);
+  const noInvoiceCount = (
+    await prisma.member.findMany({
+      where: { status: "ACTIVE", duesInvoices: { none: { fiscalYear: duesFy } } },
+      select: { memberNo: true },
+    })
+  ).filter((m) => !isSystemMemberNo(m.memberNo)).length;
 
   const [txs, accounts, funds, categories, memberNames, approvals, duesRows, recent, priorFy] =
     await Promise.all([
@@ -198,6 +211,23 @@ export default async function OfficerDashboardPage() {
             <p>
               {stuck.map((a) => a.approvalId).join(", ")} — 영수증번호를 선점한 뒤 거래 기록이 끝나지
               않은 상태입니다. 같은 돈을 두 번 내주지 않도록 자동으로 풀지 않습니다.
+            </p>
+          </Alert>
+        ) : null}
+
+        {noInvoiceCount > 0 ? (
+          <Alert
+            tone="warn"
+            title={`${duesFy}년 회비고지가 없는 활동 회원 ${noInvoiceCount}명`}
+            action={
+              <LinkButton href={`${ROUTES.officer}/dues`} variant="primary">
+                회비고지 생성 화면으로
+              </LinkButton>
+            }
+          >
+            <p>
+              고지가 없으면 회비를 내도 회원증이 발급되지 않고, 회비 미납 집계에도 잡히지
+              않습니다. 미리보기를 확인한 뒤 한 번에 만들 수 있습니다.
             </p>
           </Alert>
         ) : null}
@@ -416,6 +446,15 @@ export default async function OfficerDashboardPage() {
                 label={`${fy}년 회비 미납`}
                 value={`${unpaidCount}명 · ${formatPeso(unpaidTotal)}`}
                 tone={unpaidTotal > 0 ? "expense" : "income"}
+              />
+              <StatLine
+                label={
+                  <Link href={`${ROUTES.officer}/dues`} className="underline underline-offset-2">
+                    {duesFy}년 회비고지 없는 활동 회원
+                  </Link>
+                }
+                value={`${noInvoiceCount}명`}
+                tone={noInvoiceCount > 0 ? "expense" : "income"}
               />
               <StatLine label="개시잔액 검증 (I6)" value={opening.ok ? "정상" : "불일치"} tone={opening.ok ? "income" : "expense"} />
             </CardBody>
