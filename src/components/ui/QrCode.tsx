@@ -28,19 +28,13 @@ import { cn } from "./cn";
 /** 여백(quiet zone). QR 규격 권장 최소 4모듈 — 좁히면 스캐너가 경계를 못 찾는다. */
 const QUIET_ZONE = 4;
 
-export function QrCode({
-  value,
-  /** 화면 표시 크기(px). 인쇄 크기는 CSS 로 따로 정한다. */
-  size = 128,
-  /** 스크린리더가 읽을 설명. "무엇을 여는 QR 인가" 를 적는다. */
-  label,
-  className,
-}: {
-  value: string;
-  size?: number;
-  label: string;
-  className?: string;
-}) {
+/**
+ * QR 매트릭스 → SVG path 데이터. 화면(이 컴포넌트)과 회원증 PNG(me/card/image)가
+ * 같은 함수를 쓴다 — 두 곳의 QR 이 다른 규칙으로 만들어지면 한쪽만 스캔이 깨진다.
+ *
+ * @returns span = 모듈 수 + 양쪽 여백(viewBox 한 변), d = 어두운 모듈을 합친 path
+ */
+export function buildQrPath(value: string): { span: number; d: string } {
   // eslint-disable-next-line no-control-regex -- ASCII 범위 검사에 제어문자 경계가 필요하다
   if (!/^[\x20-\x7E]+$/.test(value)) {
     throw new Error(
@@ -65,6 +59,24 @@ export function QrCode({
       }
     }
   }
+
+  return { span, d };
+}
+
+export function QrCode({
+  value,
+  /** 화면 표시 크기(px). 인쇄 크기는 CSS 로 따로 정한다. */
+  size = 128,
+  /** 스크린리더가 읽을 설명. "무엇을 여는 QR 인가" 를 적는다. */
+  label,
+  className,
+}: {
+  value: string;
+  size?: number;
+  label: string;
+  className?: string;
+}) {
+  const { span, d } = buildQrPath(value);
 
   return (
     <svg

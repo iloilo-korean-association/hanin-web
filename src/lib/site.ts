@@ -34,7 +34,8 @@ export const EMERGENCY_NUMBER = "911";
  *   공개(인증 없음)   /, /ledger, /biz, /services, /sos, /join, /donate, /events, /help,
  *                     /login, /login/forgot
  *   회원(매직링크)    /me/[token]
- *   회원(세션쿠키)    /me, /me/password, /me/card   ← P1 비밀번호 로그인 · P3 회원증
+ *   회원(세션쿠키)    /me, /me/password, /me/card, /me/card/image(PNG)
+ *                                                   ← P1 비밀번호 로그인 · P3 회원증
  *   임원(세션쿠키)    /officer, /officer/login, /officer/receipt,
  *                     /officer/expense, /officer/approve, /officer/audit,
  *                     /officer/members, /officer/members/photos
@@ -59,6 +60,8 @@ export const ROUTES = {
   mePassword: "/me/password",
   /** 디지털 회원증 (P3). 인쇄용 단독 화면 */
   meCard: "/me/card",
+  /** 회원증 PNG (P3 "이미지로 저장"). /me/card 와 같은 가드(세션 또는 ?token=) */
+  meCardImage: "/me/card/image",
   /** 회원증 진위 확인 (P3). QR 이 가리키는 공개 주소 — 회원번호가 아니라 난수 토큰이다 */
   verify: (verifyToken: string) => `/verify/${encodeURIComponent(verifyToken)}`,
   login: "/login",

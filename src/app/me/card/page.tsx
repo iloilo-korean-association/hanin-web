@@ -17,6 +17,8 @@ import { ROUTES } from "@/lib/site";
 import { PrintButton } from "../../officer/_components/PrintButton";
 import { loadMemberCardData } from "../_portal/card-data";
 import { MemberIdCard } from "../_portal/MemberIdCard";
+import { memberCardFileName } from "./image/file-name";
+import { SaveImageButton } from "./SaveImageButton";
 
 /**
  * /me/card — 디지털 회원증 단독 화면 (P3).
@@ -77,6 +79,10 @@ export default async function MemberCardPage({
 
   const data = await loadMemberCardData(me.memberNo);
   const backHref = token ? ROUTES.me(token) : ROUTES.meHome;
+  // PNG 라우트도 이 화면과 같은 인증을 받는다 — 매직링크로 왔으면 토큰을 그대로 넘긴다
+  const imageHref = token
+    ? `${ROUTES.meCardImage}?token=${encodeURIComponent(token)}`
+    : ROUTES.meCardImage;
 
   return (
     <PageContainer>
@@ -85,7 +91,17 @@ export default async function MemberCardPage({
         titleEn="Membership Card"
         breadcrumb={[{ href: backHref, label: "내 정보" }]}
         description={`${data.fiscalYear}년 회비 납부 회원에게 발급됩니다.`}
-        actions={data.verdict.valid ? <PrintButton label="회원증 인쇄" /> : null}
+        actions={
+          data.verdict.valid ? (
+            // 인쇄 버튼은 저장 버튼과 같은 줄에, 저장 안내문은 그 아래 줄에 (SaveImageButton 이 배치)
+            <SaveImageButton
+              imageHref={imageHref}
+              fileName={memberCardFileName(data.member.memberNo, data.fiscalYear)}
+            >
+              <PrintButton label="회원증 인쇄" />
+            </SaveImageButton>
+          ) : null
+        }
       />
 
       <Stack gap="md">

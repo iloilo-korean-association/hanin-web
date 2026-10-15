@@ -15,6 +15,13 @@ const nextConfig: NextConfig = {
   // 압축/최적화는 기본값을 그대로 쓴다.
   poweredByHeader: false,
 
+  // 회원증 PNG(/me/card/image)가 fs 로 읽는 한글 서브셋 폰트를 배포 산출물에 포함시킨다.
+  // 코드가 경로를 리터럴로 적어 자동 추적도 되지만, 추적이 빠지면 운영에서만 폰트가 없어
+  // 한글이 두부(□)로 찍히는 사고가 나므로 명시한다.
+  outputFileTracingIncludes: {
+    "/me/card/image": ["./src/app/me/card/image/fonts/*.ttf"],
+  },
+
   // 개인정보가 있는 화면(/me, /officer)이 프록시·검색엔진에 캐시되지 않게
   // 응답 헤더로 한 번 더 못을 박는다. robots.ts 는 크롤러 신사협정일 뿐이다.
   async headers() {
