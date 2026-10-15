@@ -98,6 +98,8 @@ export default async function MemberCardPage({
               fiscalYear={data.fiscalYear}
               photoViewUrl={data.photoViewUrl}
               verifyUrl={data.verifyUrl}
+              // 단독 화면이라 포털(342px)보다 크게. 인쇄 크기는 globals.css 가 따로 못 박는다
+              className="max-w-[400px]"
             />
 
             <Card as="aside" className="no-print">
