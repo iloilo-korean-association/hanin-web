@@ -43,7 +43,7 @@ export default async function BookPage() {
   const today = todayManila();
   const thisMonth = monthOf(today);
 
-  const [accounts, funds, categories, events, officers, rows] = await Promise.all([
+  const [accounts, funds, categories, events, officers, members, rows] = await Promise.all([
     prisma.account.findMany({ where: { status: "ACTIVE" }, orderBy: { accountId: "asc" } }),
     prisma.fund.findMany({ where: { status: "ACTIVE" }, orderBy: { fundId: "asc" } }),
     prisma.category.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
@@ -58,6 +58,15 @@ export default async function BookPage() {
       select: { email: true, name: true, role: true },
       orderBy: { officerId: "asc" },
     }),
+    // 상대방 칸에서 고를 회원. 이름·회원번호만 읽는다 — 연락처·이메일은 화면으로 내려보내지 않는다.
+    // 열람 전용이면 새로 적기 폼이 없으므로 읽지도 않는다.
+    canWrite
+      ? prisma.member.findMany({
+          where: { status: { not: "WITHDRAWN" } },
+          select: { memberNo: true, name: true },
+          orderBy: { memberNo: "asc" },
+        })
+      : [],
     // 이번 달 것만 보여준다. 전체를 끌어오면 해가 갈수록 화면이 느려진다.
     prisma.transaction.findMany({
       where: { date: { startsWith: thisMonth } },
@@ -84,6 +93,8 @@ export default async function BookPage() {
     officers: officers
       .filter((o) => o.email.toLowerCase() !== me.email.toLowerCase())
       .map((o) => ({ email: o.email, label: `${o.name} (${o.role})` })),
+    // 대상 = 탈퇴(WITHDRAWN) 뺀 회원 중 M9xxx 시스템 계정 대역(M9999 관리자 등 — 실제 사람 아님, 발번 제외 규칙과 같은 기준)을 뺀 것.
+    members: members.filter((m) => !/^M9\d{3}$/.test(m.memberNo)),
     today,
     cashThreshold: flagCfg.cashThreshold,
   };

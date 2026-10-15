@@ -36,6 +36,8 @@ export type MasterData = {
   categories: { code: string; name: string; majorType: string }[];
   events: { eventId: string; title: string }[];
   officers: { email: string; label: string }[];
+  /** 상대방 칸에서 고를 회원. 이름·회원번호만 싣는다(연락처 등 다른 개인정보는 넣지 않는다). */
+  members: { memberNo: string; name: string }[];
   today: string;
   cashThreshold: number;
 };
@@ -84,6 +86,14 @@ const FLAG_TONE: Record<EntryFlag, "warn" | "danger" | "neutral"> = {
   수정됨: "neutral",
 };
 
+const MEMBER_LIST_ID = "book-member-options";
+const NO_PAYEE = { name: "", memberNo: "" };
+
+/** 회원 선택지 문구 = datalist 의 value. 동명이인을 가르려고 회원번호를 붙인다. */
+function memberOption(m: { memberNo: string; name: string }): string {
+  return `${m.name} · ${m.memberNo}`;
+}
+
 /** 'yyyy-MM-dd' → '8/14'. 목록은 같은 달만 나오므로 월/일이면 충분하다. */
 function md(date: string): string {
   const [, m, d] = date.split("-");
@@ -118,6 +128,17 @@ export function BookEntry({
   const [editRow, setEditRow] = useState<BookRowUI | null>(null);
   const [voidRow, setVoidRow] = useState<BookRowUI | null>(null);
 
+  /**
+   * 상대방 — 이름과 회원번호를 한 덩어리로 들고 있는다.
+   * 회원번호는 목록에서 **골랐을 때만** 채워지고, 그 뒤 한 글자라도 고치면 비운다.
+   * 그래야 이름은 "김철수" 인데 회원번호는 박정우 것인 줄이 저장되지 않는다.
+   */
+  const [payee, setPayee] = useState(NO_PAYEE);
+  const memberByOption = useMemo(
+    () => new Map(master.members.map((m) => [memberOption(m), m])),
+    [master.members],
+  );
+
   // 가장 최근에 끝난 액션의 메시지만 보여준다. 셋을 동시에 띄우면 무엇이 지금 일인지 알 수 없다.
   const latest = [addState, editState, voidState].reduce((a, b) => (b.at > a.at ? b : a));
 
@@ -139,6 +160,12 @@ export function BookEntry({
     setAccountId(accountForMethod(next, master.accounts, accountId));
   }
 
+  /** 목록에서 고르면 "박정우 · M0001" 이 들어온다 → 칸에는 이름만 남기고 번호는 숨은 칸으로. 그 밖의 입력은 회원 연결을 끊는다. */
+  function typePayee(value: string) {
+    const m = memberByOption.get(value);
+    setPayee(m ? { name: m.name, memberNo: m.memberNo } : { name: value, memberNo: "" });
+  }
+
   /**
    * 연속 입력의 핵심 — 상대방·금액·메모만 비우고 커서를 상대방으로 돌린다.
    * 날짜·과목·수단·계좌·기금은 그대로 두므로 두 번째 줄부터는 세 칸만 치면 된다.
@@ -148,20 +175,19 @@ export function BookEntry({
    *   통째로 사라진다. 오류 메시지만 남고 다시 처음부터 쳐야 한다 — 그게 가장 화난다.
    * ★ addState.at 을 의존성으로 쓴다. ok 만 보면 연달아 성공했을 때 값이 안 바뀌어
    *   두 번째 성공에서 폼이 안 비워진다.
+   * ★ 상대방은 state(payee)로 들고 있으므로 DOM 이 아니라 state 를 비운다 — 회원 연결도 같이 풀린다.
    */
   useEffect(() => {
     if (addState.ok !== true) return;
     const f = formRef.current;
     if (!f) return;
-    let first: HTMLInputElement | null = null;
-    for (const name of ["counterpartyName", "amount", "memo", "externalRef"]) {
+    setPayee(NO_PAYEE);
+    for (const name of ["amount", "memo", "externalRef"]) {
       const el = f.elements.namedItem(name);
-      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
-        el.value = "";
-        if (name === "counterpartyName" && el instanceof HTMLInputElement) first = el;
-      }
+      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) el.value = "";
     }
-    first?.focus();
+    const first = f.elements.namedItem("counterpartyName");
+    if (first instanceof HTMLInputElement) first.focus();
   }, [addState.ok, addState.at]);
 
   return (
@@ -239,8 +265,37 @@ export function BookEntry({
                   </Select>
                 </Field>
 
-                <Field label="상대방" htmlFor="counterpartyName" required hint={direction === "OUT" ? "수취인. 이해관계 판정의 유일한 근거입니다." : "납부자"}>
-                  <Input id="counterpartyName" name="counterpartyName" autoComplete="off" required />
+                <Field
+                  label="상대방"
+                  htmlFor="counterpartyName"
+                  required
+                  hint={
+                    direction === "OUT"
+                      ? "수취인. 이해관계 판정의 유일한 근거입니다."
+                      : "납부자. 회원이면 이름을 쳐서 나오는 목록에서 고르십시오."
+                  }
+                >
+                  {/* 회원은 목록에서 고르고, 비회원·업소는 지금처럼 직접 친다. */}
+                  <Input
+                    id="counterpartyName"
+                    name="counterpartyName"
+                    list={MEMBER_LIST_ID}
+                    value={payee.name}
+                    onChange={(e) => typePayee(e.target.value)}
+                    autoComplete="off"
+                    required
+                  />
+                  <datalist id={MEMBER_LIST_ID}>
+                    {master.members.map((m) => (
+                      <option key={m.memberNo} value={memberOption(m)} />
+                    ))}
+                  </datalist>
+                  <input type="hidden" name="memberNo" value={payee.memberNo} />
+                  {payee.memberNo ? (
+                    <p role="status" className="text-sm font-semibold text-success">
+                      회원 {payee.memberNo} 연결됨
+                    </p>
+                  ) : null}
                 </Field>
 
                 <Field label="금액" htmlFor="amount" required>
