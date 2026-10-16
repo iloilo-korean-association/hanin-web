@@ -11,6 +11,12 @@ export const ORG_TAGLINE = "필리핀 일로일로 한인 커뮤니티의 공식
 export const ORG_TAGLINE_EN = "Korean Community of Iloilo, Philippines";
 
 /**
+ * 공식 엠블럼(벡터 재현본, public 기준 경로). 헤더·회원증이 같은 파일을 쓴다.
+ * 원본은 `../한인회 로고.jpg`(200px)라 그대로 쓰면 흐려서 SVG 로 다시 그렸다.
+ */
+export const EMBLEM_PUBLIC_PATH = "/brand/logo-emblem.svg";
+
+/**
  * 사이트 절대주소.
  * · og:image, sitemap.xml, 매직링크 메일에 들어가는 주소를 만든다.
  * · 상대주소로는 카톡 썸네일 카드가 뜨지 않는다 — 반드시 절대주소여야 한다.

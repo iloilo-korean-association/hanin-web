@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { ORG_NAME, ORG_NAME_EN, PUBLIC_PAGES, ROUTES } from "@/lib/site";
+import { EMBLEM_PUBLIC_PATH, ORG_NAME, ORG_NAME_EN, PUBLIC_PAGES, ROUTES } from "@/lib/site";
 
 import { cn } from "./cn";
 
@@ -134,26 +134,22 @@ export function SiteHeader() {
   );
 }
 
-/** 로고 마크. 외부 이미지 0개 — 인라인 SVG 다. */
+/**
+ * 로고 마크 — 공식 엠블럼(회원증과 같은 파일).
+ * 외부 호출 0개: 우리 public/ 의 SVG 다. 원형이라 둘레 글자가 읽히려면 44px 은 돼야 한다
+ * (헤더 두 줄 글자 높이와도 맞는다).
+ * 장식이므로 alt 는 비운다 — 옆의 ORG_NAME 이 이미 링크 이름이다.
+ */
 function Mark() {
   return (
-    <svg
-      width="30"
-      height="30"
-      viewBox="0 0 32 32"
+    // eslint-disable-next-line @next/next/no-img-element -- 정적 SVG. next/image 최적화 대상이 아니다
+    <img
+      src={EMBLEM_PUBLIC_PATH}
+      alt=""
+      width={44}
+      height={44}
+      className="h-11 w-11 shrink-0 rounded-full"
       aria-hidden="true"
-      className="shrink-0"
-      role="presentation"
-    >
-      <rect width="32" height="32" rx="8" fill="var(--color-brand-700)" />
-      <path
-        d="M9 8v16M9 16l8-8M9 16l8 8"
-        stroke="#fff"
-        strokeWidth="2.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <circle cx="23.5" cy="16" r="3.2" fill="var(--color-accent-300)" />
-    </svg>
+    />
   );
 }

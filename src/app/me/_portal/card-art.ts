@@ -18,8 +18,8 @@ export const CARD_ART_SIZE = { width: 856, height: 540 } as const;
 /** 카드에서만 쓰는 영문 표기 — 공식 엠블럼의 둘레 글자와 같게. 사이트 전체(site.ts)는 그대로 */
 export const CARD_ORG_NAME_EN = "Iloilo Korean United Community Association";
 
-/** 엠블럼 파일 경로(public 기준). PNG 렌더러는 같은 파일을 fs 로 읽는다 */
-export const EMBLEM_PUBLIC_PATH = "/brand/logo-emblem.svg";
+/** 엠블럼 파일 경로 — 정본은 site.ts(헤더도 같은 파일을 쓴다). PNG 렌더러는 fs 로 읽는다 */
+export { EMBLEM_PUBLIC_PATH } from "@/lib/site";
 
 const WM = { cx: 792, cy: 262, r: 300, tilt: -34 } as const;
 
