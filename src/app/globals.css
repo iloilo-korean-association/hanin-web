@@ -241,23 +241,10 @@
     background: linear-gradient(135deg, var(--color-brand-800) 0%, var(--color-brand-900) 100%);
   }
 
-  /* 장식 한 겹 — 대각선 밴드 + 로고의 금점을 크게 키운 링. QR·사진 아래에만 깔린다 */
+  /* 장식 한 겹 — 엠블럼의 태극 곡선을 키운 워터마크. 그림 자체는 me/_portal/card-art.ts 의
+     SVG 한 장(PNG 렌더러와 공유)이고, 여기서는 정보 요소 아래 겹에 꽉 채우기만 한다 */
   [data-id-card-art] {
-    background:
-      radial-gradient(
-        circle at 88% 6%,
-        transparent 10.6em,
-        rgba(227, 169, 81, 0.16) 10.6em,
-        rgba(227, 169, 81, 0.16) 11.4em,
-        transparent 11.4em
-      ),
-      linear-gradient(
-        112deg,
-        transparent 34%,
-        rgba(255, 255, 255, 0.045) 34%,
-        rgba(255, 255, 255, 0.045) 58%,
-        transparent 58%
-      );
+    overflow: hidden;
   }
 }
 

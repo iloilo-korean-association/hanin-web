@@ -19,7 +19,7 @@ const nextConfig: NextConfig = {
   // 코드가 경로를 리터럴로 적어 자동 추적도 되지만, 추적이 빠지면 운영에서만 폰트가 없어
   // 한글이 두부(□)로 찍히는 사고가 나므로 명시한다.
   outputFileTracingIncludes: {
-    "/me/card/image": ["./src/app/me/card/image/fonts/*.ttf"],
+    "/me/card/image": ["./src/app/me/card/image/fonts/*.ttf", "./public/brand/logo-emblem.svg"],
   },
 
   // 개인정보가 있는 화면(/me, /officer)이 프록시·검색엔진에 캐시되지 않게
