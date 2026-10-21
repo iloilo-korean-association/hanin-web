@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { ImageResponse } from "next/og";
 
 import { buildQrPath } from "@/components/ui/QrCode";
+import { formatPeriodDate, type MembershipPeriod } from "@/lib/domain/membershipPeriod";
 import { ORG_NAME } from "@/lib/site";
 
 import { CARD_ORG_NAME_EN, cardWatermarkSvg, svgToDataUrl } from "../../_portal/card-art";
@@ -167,7 +168,8 @@ export type MemberCardImageInput = {
   name: string;
   memberNo: string;
   memberType: string;
-  fiscalYear: number;
+  /** 오늘 유효한 회원 기간 — verdict.period. 화면 카드와 같은 값 */
+  period: MembershipPeriod;
   /** fetchPhotoAsDataUrl 결과. "" 이면 "사진 없음" 플레이스홀더 */
   photoDataUrl: string;
   /** QR 이 가리킬 절대 주소 — /verify/<난수토큰> */
@@ -382,35 +384,36 @@ export async function renderMemberCardImage(input: MemberCardImageInput): Promis
               </div>
             </div>
 
+            {/* 화면의 dl grid-cols-2: 1줄 = 회원번호 | 회원구분, 2줄 = 유효기간(전체 폭) */}
             <div style={{ display: "flex", flexDirection: "column", gap: px(0.5), lineHeight: 1 }}>
-              <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-                <div style={labelStyle}>회원번호 · NO.</div>
-                <div
-                  style={{
-                    marginTop: px(1.15 * 0.3),
-                    fontSize: px(1.15),
-                    fontWeight: 700,
-                    letterSpacing: px(1.15 * 0.12),
-                    color: COLOR.accent200,
-                    ...truncate,
-                  }}
-                >
-                  {input.memberNo}
-                </div>
-              </div>
               <div style={{ display: "flex", gap: px(1) }}>
+                <div style={{ display: "flex", flexDirection: "column", flexGrow: 1, flexBasis: 0, minWidth: 0 }}>
+                  <div style={labelStyle}>회원번호 · NO.</div>
+                  <div
+                    style={{
+                      marginTop: px(1.15 * 0.3),
+                      fontSize: px(1.15),
+                      fontWeight: 700,
+                      letterSpacing: px(1.15 * 0.12),
+                      color: COLOR.accent200,
+                      ...truncate,
+                    }}
+                  >
+                    {input.memberNo}
+                  </div>
+                </div>
                 <div style={{ display: "flex", flexDirection: "column", flexGrow: 1, flexBasis: 0, minWidth: 0 }}>
                   <div style={labelStyle}>회원구분</div>
                   <div style={{ marginTop: px(0.3), fontSize: px(1), fontWeight: 700, ...truncate }}>
                     {input.memberType}
                   </div>
                 </div>
-                <div style={{ display: "flex", flexDirection: "column", flexGrow: 1, flexBasis: 0, minWidth: 0 }}>
-                  <div style={labelStyle}>유효연도</div>
-                  {/* satori: 자식이 둘 이상인 div 는 display:flex 가 있어야 한다 — 숫자+글자를 한 문자열로 */}
-                  <div style={{ marginTop: px(0.3), fontSize: px(1), fontWeight: 700, ...truncate }}>
-                    {`${input.fiscalYear}년`}
-                  </div>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+                <div style={labelStyle}>유효기간</div>
+                {/* satori: 자식이 둘 이상인 div 는 display:flex 가 있어야 한다 — 기간을 한 문자열로 */}
+                <div style={{ marginTop: px(0.3), fontSize: px(1), fontWeight: 700, ...truncate }}>
+                  {`${formatPeriodDate(input.period.validFrom)} ~ ${formatPeriodDate(input.period.validUntil)}`}
                 </div>
               </div>
             </div>
@@ -439,7 +442,7 @@ export async function renderMemberCardImage(input: MemberCardImageInput): Promis
             color: white(0.65),
           }}
         >
-          {`이 회원증은 ${input.fiscalYear}년 회비를 납부하신 회원에게 발급됩니다. ` +
+          {"회비 납부일부터 1년간 유효합니다. " +
             "진위는 QR 로 확인해 주십시오 — 화면 캡처는 확인 근거가 되지 않습니다."}
         </div>
       </div>

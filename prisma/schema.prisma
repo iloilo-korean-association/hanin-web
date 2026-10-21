@@ -284,6 +284,12 @@ model DuesInvoice {
   dunning3On    String? // 독촉3차일 — 3차까지만
   exemptReason  String  @default("") // 면제사유
   note          String  @default("") // 비고
+  // [추가 2026-10-21] 회원 자격 기간 — 회비 완납일(면제는 고지일)부터 1년, 양 끝 포함 (yyyy-MM-dd).
+  //   완납·면제가 되는 순간 같은 트랜잭션에서 채우고, 미납·부분납으로 돌아가면 지운다.
+  //   계산 규칙(1년·이어붙이기)은 src/lib/domain/membershipPeriod.ts 한 곳. 부과(회계연도별 1건)는 그대로다.
+  //   회원증 유효/무효는 여기 저장하지 않는다 — 오늘 날짜가 이 구간 안인지 볼 때마다 센다.
+  validFrom     String? // 회원기간시작
+  validUntil    String? // 회원기간만료
 
   member      Member       @relation(fields: [memberNo], references: [memberNo])
   lastReceipt Transaction? @relation("DuesLastReceipt", fields: [lastReceiptNo], references: [receiptNo])

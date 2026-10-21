@@ -135,7 +135,7 @@ export type ServiceStatus = (typeof SERVICE_STATUSES)[number];
 /**
  * 사진 검수 상태.
  * 올리면 '대기' → 총무가 '승인' 또는 '반려'(사유 필수).
- * 회원증은 '승인' + 당해연도 회비 납부일 때만 발급된다(domain/memberCard.ts).
+ * 회원증은 '승인' + 오늘이 회원 기간(회비 완납일부터 1년) 안일 때만 발급된다(domain/memberCard.ts).
  */
 export const MEMBER_PHOTO_STATUSES = ["대기", "승인", "반려"] as const;
 export const zMemberPhotoStatus = z.enum(MEMBER_PHOTO_STATUSES);

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { prisma } from "@/lib/db";
+import { periodChangeNote, syncMembershipPeriod } from "@/lib/dues-period";
 import {
   assertFyOpen,
   cfgStr,
@@ -10,6 +11,7 @@ import {
   duesRecategorizeBlocked,
   evaluateConflict,
   formatMoney,
+  formatPeriod,
   fxTableFrom,
   loadSettings,
   nextReceiptNo,
@@ -268,12 +270,19 @@ export async function addEntryAction(_prev: ActionState, fd: FormData): Promise<
               lastPaidOn: input.date,
             },
           });
+          // 회원 기간 (대표 결정 2026-10-21) — 이 수납으로 완납에 닿았으면 그 날부터 1년(이어붙이기 포함).
+          // 이미 기간이 있는 완납 고지에 더 낸 돈(과납)은 기간을 바꾸지 않는다 — syncMembershipPeriod 참조.
+          const periodChange = await syncMembershipPeriod(tx, inv.invoiceId, {
+            actor: me.email,
+            via: `장부 수납 ${receiptNo}`,
+            duesCategory: prep.duesCategory,
+          });
           duesNote =
-            unpaid > 0
+            (unpaid > 0
               ? ` 회비 ${formatMoney(unpaid)}페소가 남았습니다.`
               : unpaid < 0
                 ? ` 회비 완납 + ${formatMoney(-unpaid)}페소 과납입니다.`
-                : " 회비 완납입니다.";
+                : " 회비 완납입니다.") + periodChangeNote(periodChange);
         } else {
           duesNote = ` ${fy}년 회비고지가 없는 회원입니다.`;
         }
@@ -356,7 +365,7 @@ export async function editEntryAction(_prev: ActionState, fd: FormData): Promise
       input.direction === "OUT" ? await judgeConflict(input.counterpartyName, input.vendorId) : null;
     const relatedParty = !!verdict && (verdict.related || verdict.undetermined);
 
-    await prisma.$transaction(async (tx) => {
+    const edited = await prisma.$transaction(async (tx) => {
       const before = await tx.transaction.findUnique({ where: { receiptNo: input.receiptNo } });
       if (!before) throw new Error(`거래 ${input.receiptNo} 를 찾을 수 없습니다.`);
       if (before.status === "VOIDED") {
@@ -440,12 +449,49 @@ export async function editEntryAction(_prev: ActionState, fd: FormData): Promise
         severity: before.amountPhp !== prep.amountPhp ? "CRITICAL" : "WARN",
         note: `장부 수정 (${me.officerId} ${me.role})` + (before.reviewedAt ? " — 감사 확인 후 수정됨" : ""),
       });
+
+      /* ── 회원 기간은 수정으로 다시 계산하지 않는다 ──
+         회비 수납의 날짜를 고쳐도 이미 정해진 회원 기간(완납일부터 1년)은 그대로다. 다시 계산하면
+         그 뒤에 이어붙은 기간까지 연쇄로 흔들린다. 대신 알린다 — 바로잡는 길은 무효 후 재입력이고,
+         그러면 무효에서 기간이 지워지고 재입력에서 새 날짜로 다시 정해진다. */
+      let periodWarn = "";
+      if (
+        before.counterpartyMemberNo &&
+        before.direction === "IN" &&
+        before.categoryCode === prep.duesCategory &&
+        before.date !== input.date
+      ) {
+        const inv = await tx.duesInvoice.findUnique({
+          where: {
+            fiscalYear_memberNo: { fiscalYear: before.fiscalYear, memberNo: before.counterpartyMemberNo },
+          },
+          select: { invoiceId: true, validFrom: true, validUntil: true },
+        });
+        if (inv?.validFrom && inv.validUntil) {
+          periodWarn =
+            ` ⚠ 회원 기간(${formatPeriod({ validFrom: inv.validFrom, validUntil: inv.validUntil })})은 날짜를 고쳐도 바뀌지 않습니다.` +
+            " 기간도 바로잡으려면 이 줄을 무효 처리한 뒤 올바른 날짜로 새로 적어 주십시오.";
+          await appendAuditLog(tx, {
+            actor: me.email,
+            tableName: "DuesInvoice",
+            recordKey: inv.invoiceId,
+            fieldName: "validFrom~validUntil",
+            beforeValue: `${inv.validFrom} ~ ${inv.validUntil}`,
+            afterValue: `${inv.validFrom} ~ ${inv.validUntil}`,
+            changeType: "OTHER",
+            severity: "WARN",
+            relatedKey: before.counterpartyMemberNo,
+            note: `회비 수납 ${input.receiptNo} 날짜 수정(${before.date} → ${input.date}) — 회원 기간은 다시 계산하지 않음`,
+          });
+        }
+      }
+      return { periodWarn };
     });
 
     revalidatePath(`${ROUTES.officer}/book`);
     revalidatePath(`${ROUTES.officer}/audit`);
     revalidatePath(ROUTES.ledger);
-    return ok(`${input.receiptNo} 를 고쳤습니다. 감사 확인 대기로 다시 올라갑니다.`);
+    return ok(`${input.receiptNo} 를 고쳤습니다. 감사 확인 대기로 다시 올라갑니다.` + edited.periodWarn);
   } catch (e) {
     return toActionError(e);
   }
@@ -474,7 +520,7 @@ export async function voidEntryAction(_prev: ActionState, fd: FormData): Promise
     if (!parsed.success) return fail(firstIssue(parsed.error));
     const input = parsed.data;
 
-    await prisma.$transaction(async (tx) => {
+    const voided = await prisma.$transaction(async (tx) => {
       const before = await tx.transaction.findUnique({ where: { receiptNo: input.receiptNo } });
       if (!before) throw new Error(`거래 ${input.receiptNo} 를 찾을 수 없습니다.`);
       if (before.status === "VOIDED") throw new Error("이미 무효 처리된 거래입니다.");
@@ -486,7 +532,9 @@ export async function voidEntryAction(_prev: ActionState, fd: FormData): Promise
       });
 
       /* ── 회비 수납을 무효로 하면 06_회비고지를 되돌린다 ──
-         안 되돌리면 "돈은 안 받았는데 완납" 인 회원이 생기고, 그 사람은 독촉을 영영 안 받는다. */
+         안 되돌리면 "돈은 안 받았는데 완납" 인 회원이 생기고, 그 사람은 독촉을 영영 안 받는다.
+         완납이 부분납·미납으로 돌아가면 회원 기간도 같이 지운다(회원증 무효). */
+      let periodNote = "";
       if (before.counterpartyMemberNo && before.direction === "IN") {
         const inv = await tx.duesInvoice.findUnique({
           where: {
@@ -505,9 +553,17 @@ export async function voidEntryAction(_prev: ActionState, fd: FormData): Promise
               paidAmount: paid,
               unpaidAmount: unpaid,
               status: inv.status === "면제" ? "면제" : unpaid <= 0 ? "완납" : paid > 0 ? "부분납" : "미납",
-              lastReceiptNo: "",
+              // ★ "" 가 아니라 null. lastReceiptNo 는 05_거래를 가리키는 외래키라
+              //   "" 를 넣으면 FK 위반으로 무효 처리 전체가 롤백된다(DuesInvoice_lastReceiptNo_fkey).
+              lastReceiptNo: null,
             },
           });
+          periodNote = periodChangeNote(
+            await syncMembershipPeriod(tx, inv.invoiceId, {
+              actor: me.email,
+              via: `장부 무효 ${input.receiptNo}`,
+            }),
+          );
         }
       }
 
@@ -522,12 +578,15 @@ export async function voidEntryAction(_prev: ActionState, fd: FormData): Promise
         severity: "CRITICAL",
         note: `장부 무효 (${me.officerId} ${me.role}) — ${input.reason}`,
       });
+      return { periodNote };
     });
 
     revalidatePath(`${ROUTES.officer}/book`);
     revalidatePath(`${ROUTES.officer}/audit`);
     revalidatePath(ROUTES.ledger);
-    return ok(`${input.receiptNo} 를 무효 처리했습니다. 행은 사유와 함께 장부에 남습니다.`);
+    return ok(
+      `${input.receiptNo} 를 무효 처리했습니다. 행은 사유와 함께 장부에 남습니다.` + voided.periodNote,
+    );
   } catch (e) {
     return toActionError(e);
   }

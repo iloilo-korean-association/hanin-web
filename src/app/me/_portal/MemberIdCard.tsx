@@ -1,4 +1,5 @@
 import { cn, QrCode } from "@/components/ui";
+import { formatPeriodDate, type MembershipPeriod } from "@/lib/domain/membershipPeriod";
 import { ORG_NAME } from "@/lib/site";
 
 import { CARD_ORG_NAME_EN, cardWatermarkSvg, EMBLEM_PUBLIC_PATH, svgToDataUrl } from "./card-art";
@@ -30,6 +31,11 @@ import { CARD_ORG_NAME_EN, cardWatermarkSvg, EMBLEM_PUBLIC_PATH, svgToDataUrl } 
  *  PNG(card/image/card-image.tsx)는 **같은 파일·같은 문자열**로 그린다. 레이아웃을 바꾸면
  *  그 파일도 같이 고친다.
  *
+ * ── 유효기간 칸 (대표 결정 2026-10-21) ──────────────────────────────────
+ *  "유효연도 2026년" 대신 **회비 납부일부터 1년** 인 기간을 `2026.10.15 ~ 2027.10.14` 로 찍는다.
+ *  반쪽 칸에는 들어가지 않는 길이라 배치를 바꿨다: 1줄 = 회원번호 | 회원구분, 2줄 = 유효기간(전체 폭).
+ *  기간은 판정 결과(verdict.period)를 받은 그대로다 — 여기서 날짜를 계산하지 않는다.
+ *
  * ── 이 컴포넌트는 판정하지 않는다 ───────────────────────────────────────
  *  "발급해도 되는가" 는 domain/memberCard.ts 가 정하고, 호출 화면이 그 결과를 보고
  *  이 카드를 그릴지 말지 결정한다. 여기서 또 판정하면 두 규칙이 생긴다.
@@ -38,7 +44,8 @@ export function MemberIdCard({
   name,
   memberNo,
   memberType,
-  fiscalYear,
+  /** 오늘 유효한 회원 기간 — evaluateMemberCard 의 verdict.period (유효할 때만 이 카드를 그린다) */
+  period,
   /** 서명 URL(10분). 호출 화면이 본인 확인을 마친 뒤 만들어 넘긴 것이다 */
   photoViewUrl,
   /** QR 이 가리킬 절대 주소 — /verify/<난수토큰> */
@@ -49,7 +56,7 @@ export function MemberIdCard({
   name: string;
   memberNo: string;
   memberType: string;
-  fiscalYear: number;
+  period: MembershipPeriod;
   photoViewUrl: string;
   verifyUrl: string;
   className?: string;
@@ -124,7 +131,7 @@ export function MemberIdCard({
             </div>
 
             <dl className="grid grid-cols-2 gap-x-[1em] gap-y-[0.5em] leading-none">
-              <div className="col-span-2 min-w-0">
+              <div className="min-w-0">
                 <dt className="text-[0.62em] font-semibold tracking-[0.08em] text-white/60">
                   회원번호 · NO.
                 </dt>
@@ -136,9 +143,11 @@ export function MemberIdCard({
                 <dt className="text-[0.62em] font-semibold tracking-[0.08em] text-white/60">회원구분</dt>
                 <dd className="mt-[0.3em] truncate text-[1em] font-semibold">{memberType}</dd>
               </div>
-              <div className="min-w-0">
-                <dt className="text-[0.62em] font-semibold tracking-[0.08em] text-white/60">유효연도</dt>
-                <dd className="mt-[0.3em] truncate text-[1em] font-semibold">{fiscalYear}년</dd>
+              <div className="col-span-2 min-w-0">
+                <dt className="text-[0.62em] font-semibold tracking-[0.08em] text-white/60">유효기간</dt>
+                <dd className="mt-[0.3em] truncate text-[1em] font-semibold">
+                  {formatPeriodDate(period.validFrom)} ~ {formatPeriodDate(period.validUntil)}
+                </dd>
               </div>
             </dl>
           </div>
@@ -160,8 +169,8 @@ export function MemberIdCard({
 
         {/* ── 꼬리 ── */}
         <p className="relative mt-[0.6em] border-t-[0.08em] border-white/15 pt-[0.4em] text-[0.68em] leading-[1.3] text-white/65">
-          이 회원증은 {fiscalYear}년 회비를 납부하신 회원에게 발급됩니다. 진위는 QR 로 확인해
-          주십시오 — 화면 캡처는 확인 근거가 되지 않습니다.
+          회비 납부일부터 1년간 유효합니다. 진위는 QR 로 확인해 주십시오 — 화면 캡처는 확인
+          근거가 되지 않습니다.
         </p>
       </div>
     </div>

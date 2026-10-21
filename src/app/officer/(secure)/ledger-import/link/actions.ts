@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import type { Tx } from "@/lib/db";
 import { prisma } from "@/lib/db";
+import { syncMembershipPeriod } from "@/lib/dues-period";
 import { newLinkToken, nextInvoiceId, todayManila } from "@/lib/domain";
 import { requireOfficer } from "@/lib/guard";
 import { ROUTES } from "@/lib/site";
@@ -155,7 +156,7 @@ export async function decidePayerAction(
       if (prev?.memberNo && prev.memberNo !== memberNo) await unlinkTransactions(tx, alias);
 
       const linked = await linkTransactions(tx, alias, memberNo);
-      const dues = await syncImportDues(tx, memberNo);
+      const dues = await syncImportDues(tx, memberNo, me.email);
 
       await appendAuditLog(tx, {
         actor: me.email,
@@ -168,6 +169,7 @@ export async function decidePayerAction(
         relatedKey: memberNo,
         note:
           `납부자 표기 회원 연결 (${me.officerId} ${me.role}) — 거래 ${linked}건 갱신, 회비고지 ${dues.years.length}개 연도` +
+          (dues.periodChanges ? ` · 회원 기간 변경 ${dues.periodChanges}건` : "") +
           (createdNew ? " · 회원 신규 생성" : ""),
       });
 
@@ -179,7 +181,10 @@ export async function decidePayerAction(
 
     const duesNote =
       result.dues.years.length > 0
-        ? ` 회비고지 ${result.dues.years.map((y) => `${y.year}년 ₱${y.amount.toLocaleString("en-PH")}`).join(" · ")} 를 소급 완납으로 기록했습니다.`
+        ? ` 회비고지 ${result.dues.years.map((y) => `${y.year}년 ₱${y.amount.toLocaleString("en-PH")}`).join(" · ")} 를 소급 완납으로 기록했습니다.` +
+          (result.dues.periodChanges
+            ? ` 회원 기간 ${result.dues.periodChanges}건을 맞췄습니다(완납일부터 1년, 연도순 이어붙임 — 감사로그 참조).`
+            : "")
         : " 아직 반영된 회비 거래가 없어 회비고지는 만들지 않았습니다(반영 후 다시 연결하면 생성됩니다).";
     const skipNote =
       result.dues.skipped.length > 0
@@ -245,7 +250,12 @@ async function earliestDateFor(alias: string): Promise<string | null> {
 
 /* ═══════════════════════ 회비고지 소급 ═══════════════════════ */
 
-type DuesSync = { years: { year: number; amount: number }[]; skipped: string[] };
+type DuesSync = {
+  years: { year: number; amount: number }[];
+  skipped: string[];
+  /** 이번 연결로 회원 기간이 새로 정해지거나 지워진 고지 수 */
+  periodChanges: number;
+};
 
 /**
  * 이 회원의 **임포트 유래 회비수입 거래**를 연도별로 합산해 06_회비고지를 맞춘다.
@@ -255,13 +265,15 @@ type DuesSync = { years: { year: number; amount: number }[]; skipped: string[] }
  *   회원 화면의 합계와 회비고지가 서로 다른 숫자를 말하게 된다.
  * ★ 사람이 만든 고지(가입 시 자동 생성 등)의 **고지금액은 덮어쓰지 않는다.**
  *   덮어쓰면 "얼마를 고지했는가" 라는 사실이 사라진다. 납부금액만 갱신한다.
+ * ★ 고지를 쓸 때마다 회원 기간을 맞춘다(syncMembershipPeriod) — 완납이 되면 완납일부터 1년,
+ *   부분납으로 내려가면 지운다. 연도 오름차순으로 돌기 때문에 앞 해 기간에 뒤 해가 이어붙는다.
  */
-async function syncImportDues(tx: Tx, memberNo: string): Promise<DuesSync> {
+async function syncImportDues(tx: Tx, memberNo: string, actor: string): Promise<DuesSync> {
   const member = await tx.member.findUnique({
     where: { memberNo },
     select: { name: true, duesGrade: true },
   });
-  if (!member) return { years: [], skipped: [] };
+  if (!member) return { years: [], skipped: [], periodChanges: 0 };
 
   const txs = await tx.transaction.findMany({
     where: {
@@ -273,7 +285,7 @@ async function syncImportDues(tx: Tx, memberNo: string): Promise<DuesSync> {
     select: { receiptNo: true, fiscalYear: true, amountPhp: true, date: true },
     orderBy: [{ date: "asc" }, { seq: "asc" }],
   });
-  if (txs.length === 0) return { years: [], skipped: [] };
+  if (txs.length === 0) return { years: [], skipped: [], periodChanges: 0 };
 
   const byYear = new Map<
     number,
@@ -300,6 +312,14 @@ async function syncImportDues(tx: Tx, memberNo: string): Promise<DuesSync> {
 
   const years: { year: number; amount: number }[] = [];
   const skipped: string[] = [];
+  let periodChanges = 0;
+  const syncPeriod = async (invoiceId: string) => {
+    const change = await syncMembershipPeriod(tx, invoiceId, {
+      actor,
+      via: `장부 임포트 납부자 연결 ${memberNo}`,
+    });
+    if (change.kind !== "none") periodChanges += 1;
+  };
 
   for (const [year, agg] of [...byYear.entries()].sort((a, b) => a[0] - b[0])) {
     const existing = await tx.duesInvoice.findUnique({
@@ -307,9 +327,10 @@ async function syncImportDues(tx: Tx, memberNo: string): Promise<DuesSync> {
     });
 
     if (!existing) {
+      const invoiceId = await nextInvoiceId(tx, year);
       await tx.duesInvoice.create({
         data: {
-          invoiceId: await nextInvoiceId(tx, year),
+          invoiceId,
           fiscalYear: year,
           memberNo,
           memberName: member.name,
@@ -326,6 +347,7 @@ async function syncImportDues(tx: Tx, memberNo: string): Promise<DuesSync> {
           note: IMPORT_DUES_NOTE,
         },
       });
+      await syncPeriod(invoiceId);
       years.push({ year, amount: agg.amount });
       continue;
     }
@@ -344,6 +366,7 @@ async function syncImportDues(tx: Tx, memberNo: string): Promise<DuesSync> {
           lastPaidOn: agg.lastOn,
         },
       });
+      await syncPeriod(existing.invoiceId);
       years.push({ year, amount: agg.amount });
       continue;
     }
@@ -360,11 +383,12 @@ async function syncImportDues(tx: Tx, memberNo: string): Promise<DuesSync> {
         lastPaidOn: agg.lastOn,
       },
     });
+    await syncPeriod(existing.invoiceId);
     years.push({ year, amount: agg.amount });
     skipped.push(existing.invoiceId);
   }
 
-  return { years, skipped };
+  return { years, skipped, periodChanges };
 }
 
 /* ═══════════════════════ 채번 ═══════════════════════ */

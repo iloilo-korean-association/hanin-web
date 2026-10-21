@@ -114,7 +114,7 @@ export async function reviewMemberPhotoAction(
     return input.decision === "승인"
       ? ok(
           `${card.member.name}(${input.memberNo}) 님의 사진을 승인했습니다. ` +
-            "당해연도 회비가 납부되어 있으면 회원 화면에 회원증이 바로 나타납니다.",
+            "회원 기간 중(회비 납부일부터 1년)이면 회원 화면에 회원증이 바로 나타납니다.",
         )
       : ok(
           `${card.member.name}(${input.memberNo}) 님의 사진을 반려했습니다. ` +

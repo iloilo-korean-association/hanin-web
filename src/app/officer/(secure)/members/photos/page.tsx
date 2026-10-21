@@ -24,7 +24,15 @@ import {
   type StatItem,
 } from "@/components/ui";
 import { prisma } from "@/lib/db";
-import { cfgNum, evaluateMemberCard, loadSettings, manilaDateTimeStr, todayManila } from "@/lib/domain";
+import {
+  cardPeriodsFrom,
+  evaluateMemberCard,
+  formatPeriod,
+  formatPeriodDate,
+  manilaDateTimeStr,
+  todayManila,
+  type PeriodState,
+} from "@/lib/domain";
 import { isGuardError, requireOfficer } from "@/lib/guard";
 import { ROUTES } from "@/lib/site";
 
@@ -58,6 +66,37 @@ const STATUS_TONE: Record<string, BadgeTone> = {
   반려: "danger",
 };
 
+/** 회원 기간 칸 — 오늘 기준. 임원 화면이므로 만료일·시작일을 그대로 보여 준다(공개 /verify 와 다르다). */
+function PeriodCell({ state }: { state: PeriodState }) {
+  if (state.kind === "active") {
+    return (
+      <span className="block whitespace-nowrap text-sm tnum">
+        <Badge tone="success" dot>
+          기간 중
+        </Badge>
+        <span className="mt-1 block">{formatPeriod(state.period)}</span>
+      </span>
+    );
+  }
+  if (state.kind === "upcoming") {
+    return (
+      <span className="block whitespace-nowrap text-sm tnum">
+        <Badge tone="warn">시작 전</Badge>
+        <span className="mt-1 block">{formatPeriodDate(state.startsOn)} 부터</span>
+      </span>
+    );
+  }
+  if (state.kind === "expired") {
+    return (
+      <span className="block whitespace-nowrap text-sm tnum">
+        <Badge tone="danger">만료</Badge>
+        <span className="mt-1 block">{formatPeriodDate(state.endedOn)} 까지였음</span>
+      </span>
+    );
+  }
+  return <Badge tone="neutral">기간 없음 (회비 미납)</Badge>;
+}
+
 export default async function MemberPhotosPage() {
   let me;
   try {
@@ -77,8 +116,7 @@ export default async function MemberPhotosPage() {
     throw e;
   }
 
-  const settings = await loadSettings(prisma);
-  const fiscalYear = cfgNum(settings, "회계연도", Number(todayManila().slice(0, 4)));
+  const today = todayManila();
 
   const cards = await prisma.memberCard.findMany({
     orderBy: { photoUploadedAt: "asc" }, // 오래 기다린 분 먼저
@@ -96,9 +134,10 @@ export default async function MemberPhotosPage() {
           name: true,
           memberType: true,
           status: true,
+          // 회원 기간이 있는 고지 전부(연도 무관) — 판정은 오늘이 그 기간 안인가
           duesInvoices: {
-            where: { fiscalYear },
-            select: { status: true, billedAmount: true, paidAmount: true, unpaidAmount: true },
+            where: { validFrom: { not: null } },
+            select: { status: true, unpaidAmount: true, validFrom: true, validUntil: true },
           },
         },
       },
@@ -107,20 +146,16 @@ export default async function MemberPhotosPage() {
 
   // 서명 URL 은 렌더 시점에 만든다. 페이지당 몇 건이든 HMAC 계산이라 네트워크 비용이 없다.
   const rows = await Promise.all(
-    cards.map(async (c) => {
-      const dues = c.member.duesInvoices[0] ?? null;
-      return {
-        ...c,
-        viewUrl: c.photoUrl ? await toViewUrl(c.photoUrl) : "",
-        dues,
-        verdict: evaluateMemberCard({
-          memberStatus: c.member.status,
-          photoStatus: c.photoStatus,
-          dues,
-          fiscalYear,
-        }),
-      };
-    }),
+    cards.map(async (c) => ({
+      ...c,
+      viewUrl: c.photoUrl ? await toViewUrl(c.photoUrl) : "",
+      verdict: evaluateMemberCard({
+        memberStatus: c.member.status,
+        photoStatus: c.photoStatus,
+        periods: cardPeriodsFrom(c.member.duesInvoices),
+        today,
+      }),
+    })),
   );
   rows.sort(
     (a, b) =>
@@ -134,9 +169,9 @@ export default async function MemberPhotosPage() {
     { label: "승인", value: `${countOf("승인")}건`, tone: "income" },
     { label: "반려", value: `${countOf("반려")}건` },
     {
-      label: `${fiscalYear}년 회원증 발급 가능`,
+      label: "회원증 발급 가능 (오늘)",
       value: `${rows.filter((r) => r.verdict.valid).length}명`,
-      sub: "사진 승인 + 회비 납부",
+      sub: "사진 승인 + 회원 기간 중(회비 납부일부터 1년)",
     },
   ];
 
@@ -156,7 +191,7 @@ export default async function MemberPhotosPage() {
           { href: ROUTES.officer, label: "임원" },
           { href: `${ROUTES.officer}/members`, label: "회원" },
         ]}
-        description="회원이 올린 회원증 사진을 확인하고 승인하거나 반려합니다. 승인하면 당해연도 회비를 납부한 회원에게 디지털 회원증이 즉시 발급됩니다."
+        description="회원이 올린 회원증 사진을 확인하고 승인하거나 반려합니다. 승인하면 회원 기간 중인(회비 납부일부터 1년) 회원에게 디지털 회원증이 즉시 발급됩니다."
         actions={<LinkButton href={`${ROUTES.officer}/members`}>회원 명부로</LinkButton>}
       />
 
@@ -207,7 +242,7 @@ export default async function MemberPhotosPage() {
                     <TH>회원</TH>
                     <TH>상태</TH>
                     <TH>제출 · 검수</TH>
-                    <TH>{fiscalYear}년 회비</TH>
+                    <TH>회원 기간</TH>
                     <TH>회원증</TH>
                     <TH>
                       <span className="sr-only">판정</span>
@@ -260,13 +295,7 @@ export default async function MemberPhotosPage() {
                         ) : null}
                       </TD>
                       <TD>
-                        {r.dues ? (
-                          <Badge tone={r.verdict.duesOk ? "success" : "danger"}>
-                            {r.dues.status}
-                          </Badge>
-                        ) : (
-                          <Badge tone="neutral">고지 없음</Badge>
-                        )}
+                        <PeriodCell state={r.verdict.periodState} />
                       </TD>
                       <TD>
                         {r.verdict.valid ? (

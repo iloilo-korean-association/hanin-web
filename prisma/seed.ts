@@ -45,6 +45,7 @@ import {
   resetNotifySeqCache,
   memberLinkPath,
   newLinkToken,
+  nextPeriod,
   FALLBACK_TEMPLATES,
   PUBLIC_LEDGER_PATH,
   type TxRow,
@@ -1345,6 +1346,10 @@ async function main(): Promise<void> {
     const d2 = status === "미납" && i % 3 === 0 ? `${FY}-03-30` : null;
     const d3 = status === "미납" && i % 7 === 0 ? `${FY}-04-29` : null;
 
+    // 회원 기간 (대표 결정 2026-10-21) — 완납은 수납일(시드는 회원당 회비 수납 1건), 면제는 고지일부터 1년.
+    const completedOn = status === "완납" && lastTx ? lastTx.date : status === "면제" ? billedOn : null;
+    const period = completedOn ? nextPeriod({ completedOn, existingPeriods: [] }) : null;
+
     return {
       invoiceId: `DU-${FY}-${String(i + 1).padStart(4, "0")}`,
       fiscalYear: FY,
@@ -1365,6 +1370,8 @@ async function main(): Promise<void> {
       dunning3On: d3,
       exemptReason: dp.billed === 0 ? "명예회원 (회비규정 제6조 ② 고령·공로 회원 면제)" : "",
       note: m.status === "WITHDRAWN" ? "탈퇴 처리. 미납분은 결손 처리 예정" : "",
+      validFrom: period?.validFrom ?? null,
+      validUntil: period?.validUntil ?? null,
     };
   });
   await prisma.duesInvoice.createMany({ data: duesRows });

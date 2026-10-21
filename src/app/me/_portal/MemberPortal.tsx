@@ -31,6 +31,7 @@ import {
   buildMemberPayments,
   cfgNum,
   cfgStr,
+  formatPeriod,
   loadSettings,
   manilaDateTimeStr,
   PAYMENT_KINDS_IN,
@@ -265,13 +266,13 @@ export async function MemberPortal({
         <StatGrid label={`${year} 회계연도 내 납부 요약`} items={stats} />
 
         {/* ── 디지털 회원증 (P3) ─────────────────────────────────────
-              발급 조건: 사진 승인 + 당해연도 회비 납부 (대표 확정 2026-08-11).
+              발급 조건: 사진 승인 + 오늘이 회원 기간(회비 납부일부터 1년) 안 (대표 확정 2026-10-21).
               못 갖춘 것이 있으면 카드 대신 "무엇이 남았는가" 를 보여 준다 —
               "회원증이 없습니다" 만 띄우면 회원은 총무에게 전화한다. */}
         <Card>
           <CardHeader
             title="디지털 회원증"
-            description={`${cardData.fiscalYear}년 회비를 납부하시고 사진이 승인되면 발급됩니다. 제휴 업소에 제시하실 수 있습니다.`}
+            description="회비를 납부하시고 사진이 승인되면 발급됩니다. 회비 납부일부터 1년간 유효하며, 제휴 업소에 제시하실 수 있습니다."
             action={
               cardData.verdict.valid ? (
                 <LinkButton href={ROUTES.meCard} size="sm">
@@ -283,13 +284,13 @@ export async function MemberPortal({
             }
           />
           <CardBody>
-            {cardData.verdict.valid ? (
+            {cardData.verdict.valid && cardData.verdict.period ? (
               <div className="flex flex-col gap-3">
                 <MemberIdCard
                   name={cardData.member.name}
                   memberNo={cardData.member.memberNo}
                   memberType={cardData.member.memberType}
-                  fiscalYear={cardData.fiscalYear}
+                  period={cardData.verdict.period}
                   photoViewUrl={cardData.photoViewUrl}
                   verifyUrl={cardData.verifyUrl}
                 />
@@ -309,7 +310,10 @@ export async function MemberPortal({
                     ))}
                   </ul>
                 </Alert>
-                {!cardData.verdict.duesOk && selectedInvoice && year === cardData.fiscalYear ? (
+                {!cardData.verdict.duesOk &&
+                selectedInvoice &&
+                selectedInvoice.unpaidAmount > 0 &&
+                year === cardData.fiscalYear ? (
                   <p className="text-sm text-ink-muted">
                     남은 회비: <b className="tnum">{formatPeso(selectedInvoice.unpaidAmount)}</b> ·
                     납기 {selectedInvoice.dueOn}
@@ -485,6 +489,7 @@ export async function MemberPortal({
                     <TH numeric>미납</TH>
                     <TH>납기</TH>
                     <TH>상태</TH>
+                    <TH>회원 기간</TH>
                   </TR>
                 </THead>
                 <TBody>
@@ -503,6 +508,12 @@ export async function MemberPortal({
                         {d.exemptReason ? (
                           <span className="mt-1 block text-sm text-ink-muted">{d.exemptReason}</span>
                         ) : null}
+                      </TD>
+                      {/* 완납·면제 고지에만 있다 — 회비 납부일(면제는 고지일)부터 1년 */}
+                      <TD className="whitespace-nowrap text-sm tnum">
+                        {d.validFrom && d.validUntil
+                          ? formatPeriod({ validFrom: d.validFrom, validUntil: d.validUntil })
+                          : "—"}
                       </TD>
                     </TR>
                   ))}

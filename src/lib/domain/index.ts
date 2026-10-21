@@ -19,6 +19,8 @@ export * from "./conflict";
 export * from "./approval";
 export * from "./ledger";
 export * from "./memberPayments";
+// 회원 자격 기간(회비 완납일부터 1년) — 기간 계산·이어붙이기·오늘 유효 기간. memberCard.ts 가 읽는다.
+export * from "./membershipPeriod";
 export * from "./memberCard";
 // 06_회비고지 연 1회 일괄 고지 계획 + 고지ID 채번(가입·납부자 연결·일괄 고지가 같이 쓴다).
 export * from "./dues";

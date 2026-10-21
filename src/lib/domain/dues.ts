@@ -1,5 +1,6 @@
 import type { Db } from "../db";
 import type { DuesStatus } from "../validators/enums";
+import { completionDateOf, nextPeriod, type PeriodLike } from "./membershipPeriod";
 import { addDays } from "./money";
 
 /**
@@ -127,6 +128,11 @@ export type DuesPlanInput = {
   /** 그 회계연도에 이미 고지가 있는 회원번호 */
   invoicedMemberNos: Iterable<string>;
   receipts: readonly DuesReceiptRow[];
+  /**
+   * 이미 기간이 있는 고지(연도 무관) — 완납·면제로 만들어지는 고지의 이어붙이기 기준.
+   * 비워 두면 이어붙이기 없이 완납일부터 1년이다.
+   */
+  existingPeriods?: readonly (PeriodLike & { memberNo: string })[];
 };
 
 export type PlannedInvoice = {
@@ -146,6 +152,12 @@ export type PlannedInvoice = {
   /** 반영한 수납 건수 */
   receiptCount: number;
   note: string;
+  /**
+   * 회원 기간 (대표 결정 2026-10-21) — 완납·면제로 만들어질 때만. 미납·부분납이면 null.
+   * 완납 = 고지 전 수납을 날짜순으로 쌓아 고지금액에 처음 닿은 날, 면제 = 고지일. 이어붙이기 포함.
+   */
+  validFrom: string | null;
+  validUntil: string | null;
 };
 
 export type DuesSkip = { memberNo: string; name: string; duesGrade: string; reason: string };
@@ -180,6 +192,8 @@ export const DUES_BATCH_NOTE = "회비고지 일괄 생성";
  *  ③ 고지 없이 먼저 받은 회비가 장부에 있으면 그 금액을 납부금액으로 반영한다.
  *     (같은 회계연도 · POSTED · IN · 회비 과목 · 상대방회원번호 = 그 회원)
  *     반영하지 않으면 이미 낸 회원이 '미납' 으로 고지되고 독촉 대상이 된다.
+ *  ④ 그 결과 완납·면제로 만들어지는 고지에는 회원 기간을 함께 정한다(membershipPeriod.ts).
+ *     완납일 = 고지 전 수납이 고지금액에 처음 닿은 날, 면제 = 고지일. 기존 기간이 있으면 이어붙인다.
  */
 export function planDuesInvoices(input: DuesPlanInput): DuesPlan {
   const billedOn = input.today;
@@ -187,7 +201,10 @@ export function planDuesInvoices(input: DuesPlanInput): DuesPlan {
   const invoiced = new Set(input.invoicedMemberNos);
 
   // ③ 회원별 기존 수납 — 조건을 여기서도 다시 건다(쿼리 조건이 바뀌어도 규칙은 여기 그대로 남는다).
-  const paidBy = new Map<string, { sum: number; count: number; last: DuesReceiptRow }>();
+  const paidBy = new Map<
+    string,
+    { sum: number; count: number; last: DuesReceiptRow; list: DuesReceiptRow[] }
+  >();
   for (const r of input.receipts) {
     if (r.fiscalYear !== input.fiscalYear) continue;
     if (r.status !== "POSTED" || r.direction !== "IN") continue;
@@ -195,12 +212,21 @@ export function planDuesInvoices(input: DuesPlanInput): DuesPlan {
     if (!r.counterpartyMemberNo) continue;
     const cur = paidBy.get(r.counterpartyMemberNo);
     if (!cur) {
-      paidBy.set(r.counterpartyMemberNo, { sum: r.amountPhp, count: 1, last: r });
+      paidBy.set(r.counterpartyMemberNo, { sum: r.amountPhp, count: 1, last: r, list: [r] });
       continue;
     }
     cur.sum += r.amountPhp;
     cur.count += 1;
+    cur.list.push(r);
     if (r.date > cur.last.date || (r.date === cur.last.date && r.seq > cur.last.seq)) cur.last = r;
+  }
+
+  // ④ 회원별 기존 회원 기간 — 완납·면제 고지의 이어붙이기 기준
+  const periodsBy = new Map<string, PeriodLike[]>();
+  for (const p of input.existingPeriods ?? []) {
+    const arr = periodsBy.get(p.memberNo);
+    if (arr) arr.push(p);
+    else periodsBy.set(p.memberNo, [p]);
   }
 
   const toCreate: PlannedInvoice[] = [];
@@ -244,6 +270,19 @@ export function planDuesInvoices(input: DuesPlanInput): DuesPlan {
 
     const paid = paidBy.get(m.memberNo);
     const paidAmount = paid?.sum ?? 0;
+    const status = duesStatusFor(rate, paidAmount);
+    const lastPaidOn = paid?.last.date ?? null;
+    // ⑤ 회원 기간 — 고지하는 그 자리에서 완납(고지 전 수납이 고지금액에 닿음)이거나 면제면 정한다.
+    const completion = completionDateOf({
+      status,
+      billedAmount: rate,
+      billedOn,
+      lastPaidOn,
+      receipts: paid?.list ?? [],
+    });
+    const period = completion
+      ? nextPeriod({ completedOn: completion.date, existingPeriods: periodsBy.get(m.memberNo) ?? [] })
+      : null;
     toCreate.push({
       memberNo: m.memberNo,
       memberName: m.name,
@@ -253,12 +292,14 @@ export function planDuesInvoices(input: DuesPlanInput): DuesPlan {
       dueOn,
       paidAmount,
       unpaidAmount: rate - paidAmount,
-      status: duesStatusFor(rate, paidAmount),
+      status,
       exemptReason: rate === 0 ? "회비 단가 0원 등급" : "",
       lastReceiptNo: paid?.last.receiptNo ?? null,
-      lastPaidOn: paid?.last.date ?? null,
+      lastPaidOn,
       receiptCount: paid?.count ?? 0,
       note: paid ? `${DUES_BATCH_NOTE} · 기존 수납 ${paid.count}건 반영` : DUES_BATCH_NOTE,
+      validFrom: period?.validFrom ?? null,
+      validUntil: period?.validUntil ?? null,
     });
   }
 
@@ -310,7 +351,8 @@ function planFingerprint(
   const text = [
     `${fiscalYear}|${billedOn}|${dueOn}`,
     ...toCreate.map(
-      (p) => `${p.memberNo}|${p.duesGrade}|${p.billedAmount}|${p.paidAmount}|${p.status}|${p.lastReceiptNo ?? ""}`,
+      (p) =>
+        `${p.memberNo}|${p.duesGrade}|${p.billedAmount}|${p.paidAmount}|${p.status}|${p.lastReceiptNo ?? ""}|${p.validFrom ?? ""}`,
     ),
   ].join("\n");
   let h = 0x811c9dc5;

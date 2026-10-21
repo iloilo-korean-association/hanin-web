@@ -21,6 +21,7 @@ import {
   renderFromSettings,
 } from "@/lib/domain";
 import { hashPassword } from "@/lib/auth";
+import { syncMembershipPeriod } from "@/lib/dues-period";
 import { queueMail } from "@/lib/mail";
 import { absoluteUrl, ROUTES } from "@/lib/site";
 import { joinInputSchema, joinPasswordSchema } from "@/lib/validators";
@@ -267,6 +268,12 @@ export async function submitJoin(_prev: JoinState, formData: FormData): Promise<
           note: "웹 가입 신청 시 자동 생성",
         },
       });
+
+      // 회원 기간 (대표 결정 2026-10-21) — 면제(0원) 고지는 고지일(=오늘)부터 1년.
+      // 미납 고지면 아무것도 하지 않는다(납부 시 장부 수납에서 정해진다).
+      if (duesStatus === "면제") {
+        await syncMembershipPeriod(tx, invoiceId, { actor: "WEB", via: "웹 가입(면제 등급)" });
+      }
 
       // P1: 가입 트랜잭션 안에서 비밀번호까지 함께 만든다.
       // 회원은 생겼는데 비밀번호가 없는 어정쩡한 상태를 만들지 않는다.

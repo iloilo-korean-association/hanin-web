@@ -1,7 +1,14 @@
 import "server-only";
 
 import { prisma } from "@/lib/db";
-import { cfgNum, evaluateMemberCard, loadSettings, todayManila, type CardVerdict } from "@/lib/domain";
+import {
+  cardPeriodsFrom,
+  cfgNum,
+  evaluateMemberCard,
+  loadSettings,
+  todayManila,
+  type CardVerdict,
+} from "@/lib/domain";
 import { absoluteUrl, ROUTES } from "@/lib/site";
 
 import { toViewUrl } from "../../officer/_lib/evidence-view";
@@ -18,6 +25,7 @@ import { toViewUrl } from "../../officer/_lib/evidence-view";
  *   원본이 HTML 에 박히면 그 문자열이 그대로 남의 손에 넘어갈 수 있다(서명은 10분짜리다).
  *
  * 회원증 유효/무효는 저장하지 않고 부를 때마다 다시 센다(domain/memberCard.ts 주석 참조).
+ * 기준은 회원 기간(06_회비고지.validFrom~validUntil — 회비 완납일부터 1년)과 오늘(마닐라)이다.
  */
 export type MemberCardData = {
   member: {
@@ -35,13 +43,13 @@ export type MemberCardData = {
     photoConsentAt: Date | null;
     verifyToken: string;
   } | null;
-  /** 당해연도 회비 (06_회비고지) — 없으면 null */
-  dues: { status: string; billedAmount: number; paidAmount: number; unpaidAmount: number } | null;
+  /** 판정 결과. 오늘 유효한 회원 기간은 verdict.period (유효할 때만 표시한다) */
   verdict: CardVerdict;
   /** 본인에게만 보여 줄 사진. 서명 URL(10분). 사진이 없으면 "" */
   photoViewUrl: string;
   /** QR 이 가리킬 절대 주소. 사진(=카드 행)이 없으면 "" */
   verifyUrl: string;
+  /** 설정 '회계연도' — 회원증 판정에는 쓰지 않는다. 포털이 "올해 고지" 를 고를 때만 쓴다 */
   fiscalYear: number;
 };
 
@@ -49,7 +57,7 @@ export async function loadMemberCardData(memberNo: string): Promise<MemberCardDa
   const settings = await loadSettings(prisma);
   const fiscalYear = cfgNum(settings, "회계연도", Number(todayManila().slice(0, 4)));
 
-  const [member, card, dues] = await Promise.all([
+  const [member, card, invoices] = await Promise.all([
     prisma.member.findUniqueOrThrow({
       where: { memberNo },
       select: { memberNo: true, name: true, memberType: true, status: true, linkToken: true },
@@ -65,17 +73,18 @@ export async function loadMemberCardData(memberNo: string): Promise<MemberCardDa
         verifyToken: true,
       },
     }),
-    prisma.duesInvoice.findUnique({
-      where: { fiscalYear_memberNo: { fiscalYear, memberNo } },
-      select: { status: true, billedAmount: true, paidAmount: true, unpaidAmount: true },
+    // 회원 기간이 있는 고지 전부(연도 무관) — 이어붙인 다음 기간까지 봐야 하므로 한 해로 좁히지 않는다
+    prisma.duesInvoice.findMany({
+      where: { memberNo, validFrom: { not: null } },
+      select: { status: true, unpaidAmount: true, validFrom: true, validUntil: true },
     }),
   ]);
 
   const verdict = evaluateMemberCard({
     memberStatus: member.status,
     photoStatus: card?.photoStatus ?? "",
-    dues,
-    fiscalYear,
+    periods: cardPeriodsFrom(invoices),
+    today: todayManila(),
   });
 
   return {
@@ -89,7 +98,6 @@ export async function loadMemberCardData(memberNo: string): Promise<MemberCardDa
           verifyToken: card.verifyToken,
         }
       : null,
-    dues,
     verdict,
     photoViewUrl: card?.photoUrl ? await toViewUrl(card.photoUrl) : "",
     verifyUrl: card ? absoluteUrl(ROUTES.verify(card.verifyToken)) : "",

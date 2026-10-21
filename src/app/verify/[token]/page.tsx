@@ -11,19 +11,22 @@ import {
   Stack,
 } from "@/components/ui";
 import { prisma } from "@/lib/db";
-import { cfgNum, evaluateMemberCard, loadSettings, todayManila } from "@/lib/domain";
+import { cardPeriodsFrom, evaluateMemberCard, formatPeriod, todayManila } from "@/lib/domain";
 import { ORG_NAME, ROUTES } from "@/lib/site";
 
 /**
  * /verify/<토큰> — 회원증 진위 확인 (P3). **로그인 없는 공개 화면.**
  *
  * ══ 이 파일에 무엇을 더할 때는 먼저 이 목록을 읽어라 ══════════════════════
- *  나가는 것 : 마스킹 성명(홍*수) · 회원구분 · 유효연도 · 유효/무효
+ *  나가는 것 : 마스킹 성명(홍*수) · 회원구분 · 유효기간(유효일 때만) · 유효/무효
  *  나가면 안 되는 것 : 회원번호 · 연락처 · 이메일 · 주소 · 사진 · 납부 금액 ·
- *                      미납 여부 · 가입일 · 그 밖의 모든 원장 값
+ *                      미납 여부 · 가입일 · **무효인 회원증의 기간** · 그 밖의 모든 원장 값
  *
  *  ★ **무효 사유를 쓰지 않는다.** "회비 미납" 이라고 적으면 카드를 든 회원의
  *    재정 상태를 가게 주인에게 알려 주는 셈이다. 무효면 무효라고만 한다.
+ *  ★ 무효일 때는 **유효기간 줄도 없앤다.** "2027.10.14 까지" 가 찍힌 무효 카드는 "그날 회비가
+ *    끊겼다" 를 말해 주는 것과 같다(유효기간 = 회비 납부일부터 1년). 기간이 남았는데 무효면
+ *    다른 사유(탈퇴·사진)가 있다는 뜻이 되어 그것도 사유를 흘린다.
  *  ★ 사진을 띄우지 않는다. 얼굴은 카드 실물에 있고, 확인하는 사람은 그 실물과
  *    눈앞의 사람을 보면 된다. 웹에 얼굴을 공개할 이유가 없다.
  *  ★ 회원번호를 URL 에 쓰지 않는다. M0001 은 순차라서 M0002, M0003 … 을 세어
@@ -83,20 +86,18 @@ export default async function VerifyPage({ params }: { params: Promise<{ token: 
     );
   }
 
-  const settings = await loadSettings(prisma);
-  const fiscalYear = cfgNum(settings, "회계연도", Number(todayManila().slice(0, 4)));
-
   // ★ 회비 고지는 **판정에만** 쓴다. 금액·상태는 화면으로 내보내지 않는다.
-  const dues = await prisma.duesInvoice.findUnique({
-    where: { fiscalYear_memberNo: { fiscalYear, memberNo: card.member.memberNo } },
-    select: { status: true, billedAmount: true, paidAmount: true, unpaidAmount: true },
+  //   기간도 판정 결과(verdict.period)를 통해 **유효할 때만** 나간다.
+  const invoices = await prisma.duesInvoice.findMany({
+    where: { memberNo: card.member.memberNo, validFrom: { not: null } },
+    select: { status: true, unpaidAmount: true, validFrom: true, validUntil: true },
   });
 
   const verdict = evaluateMemberCard({
     memberStatus: card.member.status,
     photoStatus: card.photoStatus,
-    dues,
-    fiscalYear,
+    periods: cardPeriodsFrom(invoices),
+    today: todayManila(),
   });
 
   return (
@@ -118,8 +119,12 @@ export default async function VerifyPage({ params }: { params: Promise<{ token: 
             <dt className="font-semibold text-ink-muted">회원구분</dt>
             <dd>{card.member.memberType}</dd>
 
-            <dt className="font-semibold text-ink-muted">유효연도</dt>
-            <dd className="tnum">{fiscalYear}년</dd>
+            {verdict.valid && verdict.period ? (
+              <>
+                <dt className="font-semibold text-ink-muted">유효기간</dt>
+                <dd className="tnum">{formatPeriod(verdict.period)}</dd>
+              </>
+            ) : null}
           </dl>
 
           <p className="mt-4 text-sm text-ink-muted">

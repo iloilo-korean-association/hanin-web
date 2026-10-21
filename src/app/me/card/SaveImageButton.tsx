@@ -25,7 +25,7 @@ import { Button } from "@/components/ui";
 export function SaveImageButton({
   /** PNG 를 주는 라우트. 매직링크로 들어온 화면이면 ?token= 이 붙어 있다 */
   imageHref,
-  /** 저장될 파일명. 예: 일로일로한인회_회원증_M0001_2026.png */
+  /** 저장될 파일명. 예: 일로일로한인회_회원증_M0001_2027-10-14.png (끝 = 유효기간 만료일) */
   fileName,
   /** 같은 줄에 나란히 놓을 다른 버튼(인쇄). 안내문은 그 줄 **아래**에 깔린다 */
   children,

@@ -11,6 +11,7 @@ import {
   PageHeader,
   Stack,
 } from "@/components/ui";
+import { formatPeriod } from "@/lib/domain";
 import { isGuardError, requireMember, requireMemberSession } from "@/lib/guard";
 import { ROUTES } from "@/lib/site";
 
@@ -30,8 +31,8 @@ import { SaveImageButton } from "./SaveImageButton";
  * 인증: 세션(P1 비밀번호 로그인)이 기본. 매직링크로 들어오신 분을 위해 ?token= 도 받는다
  * — /me/<토큰> 에서 넘어올 때 쓴다. 어느 쪽이든 **가드가 돌려준 회원번호로만** 조회한다.
  *
- * ★ 유효/무효는 볼 때마다 다시 센다. 회비가 미납으로 돌아서면 그 순간부터
- *   이 화면에도 카드가 나오지 않는다(domain/memberCard.ts).
+ * ★ 유효/무효는 볼 때마다 다시 센다. 회원 기간(회비 납부일부터 1년)이 끝나거나
+ *   수납이 무효 처리되면 그 순간부터 이 화면에도 카드가 나오지 않는다(domain/memberCard.ts).
  */
 export const metadata: Metadata = {
   title: "디지털 회원증",
@@ -78,6 +79,7 @@ export default async function MemberCardPage({
   }
 
   const data = await loadMemberCardData(me.memberNo);
+  const period = data.verdict.valid ? data.verdict.period : null;
   const backHref = token ? ROUTES.me(token) : ROUTES.meHome;
   // PNG 라우트도 이 화면과 같은 인증을 받는다 — 매직링크로 왔으면 토큰을 그대로 넘긴다
   const imageHref = token
@@ -90,13 +92,17 @@ export default async function MemberCardPage({
         title="디지털 회원증"
         titleEn="Membership Card"
         breadcrumb={[{ href: backHref, label: "내 정보" }]}
-        description={`${data.fiscalYear}년 회비 납부 회원에게 발급됩니다.`}
+        description={
+          period
+            ? `유효기간 ${formatPeriod(period)} — 회비 납부일부터 1년간 유효합니다.`
+            : "회비를 납부하시고 사진이 승인되면 납부일부터 1년간 유효한 회원증이 발급됩니다."
+        }
         actions={
-          data.verdict.valid ? (
+          period ? (
             // 인쇄 버튼은 저장 버튼과 같은 줄에, 저장 안내문은 그 아래 줄에 (SaveImageButton 이 배치)
             <SaveImageButton
               imageHref={imageHref}
-              fileName={memberCardFileName(data.member.memberNo, data.fiscalYear)}
+              fileName={memberCardFileName(data.member.memberNo, period.validUntil)}
             >
               <PrintButton label="회원증 인쇄" />
             </SaveImageButton>
@@ -105,13 +111,13 @@ export default async function MemberCardPage({
       />
 
       <Stack gap="md">
-        {data.verdict.valid ? (
+        {period ? (
           <>
             <MemberIdCard
               name={data.member.name}
               memberNo={data.member.memberNo}
               memberType={data.member.memberType}
-              fiscalYear={data.fiscalYear}
+              period={period}
               photoViewUrl={data.photoViewUrl}
               verifyUrl={data.verifyUrl}
               // 단독 화면이라 포털(342px)보다 크게. 인쇄 크기는 globals.css 가 따로 못 박는다
@@ -134,8 +140,9 @@ export default async function MemberCardPage({
                     흑백으로 뽑으셔도 됩니다. QR 과 사진만 또렷하면 확인에 문제가 없습니다.
                   </li>
                   <li>
-                    회비가 미납으로 바뀌면 QR 확인 결과가 <b>무효</b>로 바뀝니다 — 종이 카드가
-                    남아 있어도 마찬가지입니다.
+                    유효기간이 지나거나 회비 수납이 취소되면 QR 확인 결과가 <b>무효</b>로
+                    바뀝니다 — 종이 카드가 남아 있어도 마찬가지입니다. 회비를 다시 내시면 새
+                    기간으로 다시 인쇄하시면 됩니다.
                   </li>
                 </ul>
               </CardBody>

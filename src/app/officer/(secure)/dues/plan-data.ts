@@ -45,7 +45,7 @@ export async function loadDuesPlan(
   db: Db,
   ctx: DuesContext,
 ): Promise<{ plan: DuesPlan; existingInvoiceIds: string[] }> {
-  const [members, invoices, receipts] = await Promise.all([
+  const [members, invoices, receipts, existingPeriods] = await Promise.all([
     db.member.findMany({
       where: { status: "ACTIVE" },
       orderBy: { memberNo: "asc" },
@@ -77,6 +77,11 @@ export async function loadDuesPlan(
         amountPhp: true,
       },
     }),
+    // 이미 회원 기간이 있는 고지(연도 무관) — 완납·면제로 만들어질 고지의 이어붙이기 기준
+    db.duesInvoice.findMany({
+      where: { validFrom: { not: null } },
+      select: { memberNo: true, validFrom: true, validUntil: true },
+    }),
   ]);
 
   const plan = planDuesInvoices({
@@ -88,6 +93,7 @@ export async function loadDuesPlan(
     members,
     invoicedMemberNos: invoices.map((i) => i.memberNo),
     receipts,
+    existingPeriods,
   });
 
   return { plan, existingInvoiceIds: invoices.map((i) => i.invoiceId) };

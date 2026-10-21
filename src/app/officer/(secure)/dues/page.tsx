@@ -25,7 +25,7 @@ import {
   type StatItem,
 } from "@/components/ui";
 import { prisma } from "@/lib/db";
-import { isFyClosed, loadSettings, todayManila } from "@/lib/domain";
+import { formatPeriod, isFyClosed, loadSettings, todayManila } from "@/lib/domain";
 import { isGuardError, requireOfficer } from "@/lib/guard";
 import { ROUTES } from "@/lib/site";
 import { duesIssueSchema, firstIssue } from "@/lib/validators";
@@ -289,6 +289,7 @@ export default async function DuesPage() {
                       <TH numeric>이미 낸 회비</TH>
                       <TH numeric>미납</TH>
                       <TH>상태</TH>
+                      <TH>회원 기간</TH>
                     </TR>
                   </THead>
                   <TBody>
@@ -314,6 +315,12 @@ export default async function DuesPage() {
                           {p.exemptReason ? (
                             <span className="mt-1 block text-xs text-ink-muted">{p.exemptReason}</span>
                           ) : null}
+                        </TD>
+                        {/* 완납·면제로 만들어지는 고지만 — 납부일(면제는 고지일)부터 1년, 기존 기간이 있으면 이어붙임 */}
+                        <TD className="whitespace-nowrap text-sm tnum">
+                          {p.validFrom && p.validUntil
+                            ? formatPeriod({ validFrom: p.validFrom, validUntil: p.validUntil })
+                            : "—"}
                         </TD>
                       </TR>
                     ))}

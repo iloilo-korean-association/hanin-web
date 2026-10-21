@@ -4,7 +4,7 @@ import { isGuardError, requireMember, requireMemberSession } from "@/lib/guard";
 
 import { loadMemberCardData } from "../../_portal/card-data";
 import { fetchPhotoAsDataUrl, renderMemberCardImage } from "./card-image";
-import { memberCardFileName } from "./file-name";
+import { memberCardAsciiFileName, memberCardFileName } from "./file-name";
 
 /**
  * GET /me/card/image[?token=] — 디지털 회원증 한 장을 PNG 로 (P3 "이미지로 저장").
@@ -52,7 +52,8 @@ export async function GET(req: NextRequest): Promise<Response> {
   }
 
   const data = await loadMemberCardData(me.memberNo);
-  if (!data.verdict.valid) {
+  const period = data.verdict.period;
+  if (!data.verdict.valid || !period) {
     return deny(
       403,
       "아직 회원증을 발급해 드릴 수 없습니다.",
@@ -61,14 +62,14 @@ export async function GET(req: NextRequest): Promise<Response> {
   }
 
   const photoDataUrl = await fetchPhotoAsDataUrl(data.photoViewUrl);
-  const fileName = memberCardFileName(data.member.memberNo, data.fiscalYear);
+  const fileName = memberCardFileName(data.member.memberNo, period.validUntil);
 
   try {
     const image = await renderMemberCardImage({
       name: data.member.name,
       memberNo: data.member.memberNo,
       memberType: data.member.memberType,
-      fiscalYear: data.fiscalYear,
+      period,
       photoDataUrl,
       verifyUrl: data.verifyUrl,
     });
@@ -83,7 +84,7 @@ export async function GET(req: NextRequest): Promise<Response> {
         "Content-Length": String(png.byteLength),
         // ASCII 폴백 + RFC 5987 한글 파일명
         "Content-Disposition":
-          `inline; filename="member-card_${data.member.memberNo}_${data.fiscalYear}.png"; ` +
+          `inline; filename="${memberCardAsciiFileName(data.member.memberNo, period.validUntil)}"; ` +
           `filename*=UTF-8''${encodeURIComponent(fileName)}`,
       },
     });

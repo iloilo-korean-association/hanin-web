@@ -1,50 +1,60 @@
+import {
+  formatPeriodDate,
+  grantsMembership,
+  periodState,
+  type MembershipPeriod,
+  type PeriodLike,
+  type PeriodState,
+} from "./membershipPeriod";
+
 /**
  * 디지털 회원증 유효 판정 — 순수 함수. DB 를 모른다. (P3)
  *
  * ── 왜 순수 함수 한 곳인가 ───────────────────────────────────────────────
  *  같은 판정을 **세 화면**이 쓴다:
  *    ① 회원 포털  — 회원증을 보여줄까, "무엇이 부족한지" 를 보여줄까
- *    ② /me/card   — 인쇄용 카드
+ *    ② /me/card   — 인쇄용 카드 (+ PNG 저장)
  *    ③ /verify/<토큰> — 제휴 업소가 QR 로 여는 공개 확인 페이지
+ *  (+ 임원 사진 검수 화면의 "회원증" 칸)
  *  세 곳이 각자 판정하면 반드시 어긋난다. 포털에서는 유효한데 QR 은 무효로 나오는
  *  순간 회원증은 신뢰를 잃는다. 그래서 규칙은 여기 한 곳에만 둔다.
  *
- * ── 발급 조건 (대표 확정 2026-08-11) ─────────────────────────────────────
- *  "**당해연도 회비 납부 회원만**" + 총무의 **사진 승인**.
- *  근거: 05_의사결정기록/2026-08-11_회원포털_플랜.md §3 P3 · §5 ②
+ * ── 발급 조건 (대표 확정 2026-10-21 — 2026-08-11 결정을 바꿨다) ─────────────
+ *  회원 ACTIVE + 총무의 **사진 승인** + **오늘(마닐라 날짜)이 회원 기간 안**.
+ *  회원 기간 = 회비 완납일부터 1년(면제는 면제 고지일부터). 기간 중에 다음 회비를 내면
+ *  만료일 다음 날부터 이어붙는다. 계산 규칙은 membershipPeriod.ts 한 곳에 있다.
+ *  근거: 05_의사결정기록/2026-10-21_회원자격_납부일기준1년.md
+ *  (이전: "당해 회계연도 회비 납부 회원만" — 2026-08-11_회원포털_플랜.md §3 P3.
+ *   그 방식은 10월에 낸 회원의 회원증이 12월 31일에 끊겼다.)
  *
- * ── ★ 상태를 DB 에 굳히지 않는다 ─────────────────────────────────────────
- *  회비는 언제든 미납으로 돌아설 수 있고(고지 정정·무효처리·과오납 환급),
- *  탈퇴도 언제든 일어난다. 발급 시점에 'ISSUED' 를 저장해 두면 그 뒤로 무슨 일이
- *  있어도 회원증은 계속 유효로 보인다. 그래서 **볼 때마다** 이 함수가 다시 센다.
+ * ── ★ 유효/무효를 DB 에 굳히지 않는다 ──────────────────────────────────────
+ *  저장하는 것은 **기간 날짜**(DuesInvoice.validFrom/validUntil)뿐이다. "지금 유효한가" 는
+ *  볼 때마다 오늘 날짜로 다시 센다. 수납이 무효 처리되면 그 고지의 기간이 지워지고
+ *  (book/actions.ts), 탈퇴는 언제든 일어난다 — 발급 시점에 'ISSUED' 를 저장해 두면
+ *  그 뒤로 무슨 일이 있어도 회원증은 계속 유효로 보인다.
  *
- * ── 회비 완납 판정의 정본은 06_회비고지(DuesInvoice)다 ────────────────────
- *  05_거래(수납 합계)로 세지 않는다. 회비 수납은 recordReceiptAction 이 같은
- *  트랜잭션에서 회비고지에 반영하고(부분납/완납/과납), 면제·고지금액 정정 같은
- *  "돈이 오가지 않은 사실" 은 회비고지에만 있기 때문이다.
- *  (memberPayments.ts 의 회비 소계는 **표시용**이다 — 그 값으로 판정하면
- *   면제 회원이 영원히 미납으로 잡힌다)
+ * ── 기간의 정본은 06_회비고지(DuesInvoice)다 ──────────────────────────────
+ *  05_거래(수납 합계)로 세지 않는다. 면제·고지금액 정정 같은 "돈이 오가지 않은 사실" 은
+ *  회비고지에만 있기 때문이다. 그리고 기간은 **완납·면제 고지**에만 붙는다(cardPeriodsFrom).
  */
 
-/** 06_회비고지에서 판정에 필요한 열만. 고지 자체가 없으면 null. */
-export type CardDuesSnapshot = {
+/** 06_회비고지에서 판정에 필요한 열만. 회원의 고지 전부(연도 무관)를 넘긴다. */
+export type CardDuesRow = PeriodLike & {
   /** 상태 미납/부분납/완납/면제 */
   status: string;
-  billedAmount: number;
-  paidAmount: number;
   /** 미납금액 = 고지금액 - 납부금액. 음수면 과납(선납) */
   unpaidAmount: number;
-} | null;
+};
 
 export type CardInput = {
   /** 01_회원.상태 ACTIVE/INACTIVE/WITHDRAWN/중복확인필요 */
   memberStatus: string;
   /** MemberCard.photoStatus 대기/승인/반려. 아직 한 장도 안 올렸으면 빈 문자열 */
   photoStatus: string;
-  /** 당해연도 회비 고지 */
-  dues: CardDuesSnapshot;
-  /** 유효연도 = 이 회계연도 */
-  fiscalYear: number;
+  /** 회원 기간 목록 — cardPeriodsFrom(고지들) 로 만든다 */
+  periods: readonly PeriodLike[];
+  /** Asia/Manila 오늘 'yyyy-MM-dd' (todayManila()) */
+  today: string;
 };
 
 export type CardBlockerCode =
@@ -52,8 +62,9 @@ export type CardBlockerCode =
   | "NO_PHOTO" // 사진 미제출
   | "PHOTO_PENDING" // 총무 검수 대기
   | "PHOTO_REJECTED" // 반려됨
-  | "NO_INVOICE" // 당해연도 회비 고지 자체가 없음
-  | "DUES_UNPAID"; // 회비 미납·부분납
+  | "NO_PERIOD" // 회원 기간이 한 번도 없음 — 회비 미납·부분납·고지 없음
+  | "PERIOD_EXPIRED" // 회원 기간이 끝남
+  | "PERIOD_NOT_STARTED"; // 회원 기간이 아직 시작 전
 
 export type CardBlocker = {
   code: CardBlockerCode;
@@ -69,21 +80,32 @@ export type CardVerdict = {
   /** 막고 있는 것 전부. 하나만 알려 주면 고치고 나서 또 막힌다 */
   blockers: CardBlocker[];
   photoOk: boolean;
+  /** 오늘이 회원 기간 안인가 */
   duesOk: boolean;
   memberOk: boolean;
-  /** 유효연도 */
-  fiscalYear: number;
+  /**
+   * 오늘 유효한 회원 기간 — 이어붙인 다음 기간이 있으면 그 끝까지 합친 것.
+   * 기간 밖이면 null. ★ 회원증·PNG·/verify 에는 valid 일 때만 표시한다.
+   */
+  period: MembershipPeriod | null;
+  /** 오늘 기준 기간 상태(만료일·시작일). 임원 화면·안내문용 */
+  periodState: PeriodState;
 };
 
+/**
+ * 고지 목록 → 회원 기간 목록. **완납·면제이고 금액상으로도 낼 것이 없는** 고지의 기간만.
+ * 기간은 완납·면제가 되는 순간에만 쓰이고 미납으로 돌아가면 지워지므로 보통은 같은 결과지만,
+ * 어긋난 행(기간은 있는데 미납)이 있으면 회원증을 내주지 않는 쪽으로 넘어진다.
+ */
+export function cardPeriodsFrom(rows: readonly CardDuesRow[]): PeriodLike[] {
+  return rows.filter((r) => isDuesSatisfied(r) && r.validFrom && r.validUntil);
+}
+
 /** 회비 조건 충족인가 — 면제는 "낼 의무가 면제된 것" 이므로 충족으로 본다. */
-export function isDuesSatisfied(dues: CardDuesSnapshot): boolean {
+export function isDuesSatisfied(dues: { status: string; unpaidAmount: number } | null): boolean {
   if (!dues) return false;
-  // ★ 상태 문자열이 아니라 **금액**을 기준으로 본다.
-  //   부분납이 쌓여 완납액을 채웠는데 상태 갱신이 한 박자 늦는 경우가 있고,
-  //   그때 "돈은 다 냈는데 회원증이 안 나온다" 는 민원이 총무에게 간다.
-  //   면제만 금액과 무관하게 통과시킨다(고지금액이 남아 있어도 낼 의무가 없다).
   if (String(dues.status).trim() === "면제") return true;
-  return dues.unpaidAmount <= 0;
+  return grantsMembership(dues.status) && dues.unpaidAmount <= 0;
 }
 
 export function evaluateMemberCard(input: CardInput): CardVerdict {
@@ -120,18 +142,26 @@ export function evaluateMemberCard(input: CardInput): CardVerdict {
     });
   }
 
-  const duesOk = isDuesSatisfied(input.dues);
-  if (!input.dues) {
+  const state = periodState(input.periods, input.today);
+  const duesOk = state.kind === "active";
+  if (state.kind === "none") {
     blockers.push({
-      code: "NO_INVOICE",
-      message: `${input.fiscalYear}년 회비 고지가 아직 없습니다.`,
-      howToFix: "총무에게 올해 회비 고지를 요청해 주십시오.",
+      code: "NO_PERIOD",
+      message: "회원증은 회비 납부 후 발급됩니다.",
+      howToFix:
+        "회비를 납부하시면 납부일부터 1년간 유효한 회원증이 바로 나옵니다. 이미 내셨는데 이 문구가 보이면 총무에게 말씀해 주십시오.",
     });
-  } else if (!duesOk) {
+  } else if (state.kind === "expired") {
     blockers.push({
-      code: "DUES_UNPAID",
-      message: `${input.fiscalYear}년 회비가 남아 있습니다(${input.dues.status}).`,
-      howToFix: "남은 회비를 납부하시면 회원증이 바로 발급됩니다.",
+      code: "PERIOD_EXPIRED",
+      message: `회원 기간이 ${formatPeriodDate(state.endedOn)} 에 끝났습니다.`,
+      howToFix: "회비를 납부하시면 바로 갱신됩니다(납부일부터 1년).",
+    });
+  } else if (state.kind === "upcoming") {
+    blockers.push({
+      code: "PERIOD_NOT_STARTED",
+      message: `회원 기간이 ${formatPeriodDate(state.startsOn)} 부터 시작됩니다.`,
+      howToFix: "그날부터 회원증이 자동으로 나옵니다. 따로 하실 일은 없습니다.",
     });
   }
 
@@ -141,6 +171,7 @@ export function evaluateMemberCard(input: CardInput): CardVerdict {
     photoOk,
     duesOk,
     memberOk,
-    fiscalYear: input.fiscalYear,
+    period: state.kind === "active" ? state.period : null,
+    periodState: state,
   };
 }

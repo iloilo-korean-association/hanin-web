@@ -96,6 +96,9 @@ export async function issueDuesAction(_prev: ActionState, fd: FormData): Promise
           lastPaidOn: p.lastPaidOn,
           exemptReason: p.exemptReason,
           note: p.note,
+          // 회원 기간 — 완납·면제로 만들어지는 고지만(계획에서 계산, 미리보기와 같은 값)
+          validFrom: p.validFrom,
+          validUntil: p.validUntil,
         }));
 
         // skipDuplicates — 같은 순간 다른 창에서 같은 버튼을 눌렀다면 (회계연도, 회원번호) 유니크에서
@@ -110,6 +113,7 @@ export async function issueDuesAction(_prev: ActionState, fd: FormData): Promise
         const firstId = rows[0].invoiceId;
         const lastId = rows[rows.length - 1].invoiceId;
         const count = (s: string) => plan.toCreate.filter((p) => p.status === s).length;
+        const withPeriod = plan.toCreate.filter((p) => p.validFrom);
 
         await appendAuditLog(tx, {
           actor: me.email,
@@ -119,7 +123,10 @@ export async function issueDuesAction(_prev: ActionState, fd: FormData): Promise
           severity: "INFO",
           afterValue:
             `${plan.fiscalYear}년 ${rows.length}건 (미납 ${count("미납")} / 부분납 ${count("부분납")} / 완납 ${count("완납")} / 면제 ${count("면제")}) ` +
-            `고지 ₱${formatMoney(plan.totals.billed)} · 기존 수납 반영 ₱${formatMoney(plan.totals.paid)} · 납기 ${plan.dueOn}`,
+            `고지 ₱${formatMoney(plan.totals.billed)} · 기존 수납 반영 ₱${formatMoney(plan.totals.paid)} · 납기 ${plan.dueOn}` +
+            (withPeriod.length
+              ? ` · 회원 기간 부여 ${withPeriod.length}건(${withPeriod.map((p) => `${p.memberNo} ${p.validFrom}~${p.validUntil}`).join(", ")})`
+              : ""),
           note:
             `${DUES_BATCH_NOTE} (${me.officerId} ${me.role}) — 기존 고지 ${plan.alreadyInvoiced}명 건너뜀` +
             (plan.skippedNoRate.length
@@ -160,11 +167,16 @@ export async function issueDuesAction(_prev: ActionState, fd: FormData): Promise
       plan.totals.paid > 0
         ? ` 고지 전에 받은 회비 ₱${formatMoney(plan.totals.paid)} 를 납부금액에 반영했습니다.`
         : "";
+    const periodCount = plan.toCreate.filter((p) => p.validFrom).length;
+    const periodNote = periodCount
+      ? ` 완납·면제로 만들어진 ${periodCount}건에는 회원 기간(납부일·면제일부터 1년)을 함께 정했습니다.`
+      : "";
     return ok(
       `${plan.fiscalYear}년 회비고지 ${plan.toCreate.length}건을 만들었습니다(${result.firstId}` +
         (plan.toCreate.length > 1 ? ` ~ ${result.lastId}` : "") +
         `). 고지 합계 ₱${formatMoney(plan.totals.billed)}, 납기 ${plan.dueOn}.` +
         paidNote +
+        periodNote +
         ` 기존 고지 ${plan.alreadyInvoiced}명은 건드리지 않았습니다. 메일은 보내지 않았습니다.` +
         skipNote,
     );
