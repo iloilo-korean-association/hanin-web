@@ -6,7 +6,8 @@
  *
  * ── 하는 일 (고지 한 건) ────────────────────────────────────────────────
  *   완납·면제인데 기간 없음   → 기간을 정해 쓴다 (INFO)
- *                               기산일 = completionDateOf: 면제는 고지일, 완납은 장부 회비 수납을
+ *                               기산일 = completionDateOf: 면제는 고지일(임원이 등급을 바꿔 면제가 된
+ *                                 경우만 ctx.exemptFrom = 변경일), 완납은 장부 회비 수납을
  *                               날짜순으로 쌓아 고지금액에 처음 닿은 날(없으면 최종수납일)
  *                               이어붙이기 기준 = 그 회원의 **다른** 고지들의 기간
  *   미납·부분납인데 기간 있음 → 기간을 지운다 (WARN)
@@ -63,6 +64,13 @@ export async function syncMembershipPeriod(
     via: string;
     /** 설정 '기본.과목코드.회비'. 호출자가 이미 읽었으면 넘긴다(아니면 여기서 읽는다) */
     duesCategory?: string;
+    /**
+     * [추가 2026-10-22] 면제 고지의 기산일을 고지일(billedOn) 대신 이 날로.
+     * 임원 회원 수정에서 회비등급을 0원 등급(명예)으로 바꿔 **기존 미납 고지가 면제로 바뀐** 경우,
+     * 면제가 된 날은 고지일이 아니라 변경일(오늘)이다 — 고지일부터 세면 회원이 낸 적 없는
+     * 과거 몇 달까지 회원 기간으로 쳐 주게 된다. 고지가 '면제' 가 아니면 무시된다.
+     */
+    exemptFrom?: string;
   },
 ): Promise<PeriodChange> {
   const inv = await db.duesInvoice.findUnique({
@@ -100,7 +108,10 @@ export async function syncMembershipPeriod(
         select: { date: true, seq: true, amountPhp: true },
       });
     }
-    const completion = completionDateOf({ ...inv, receipts });
+    const completion =
+      inv.status === "면제" && ctx.exemptFrom
+        ? { date: ctx.exemptFrom, source: "면제(등급 변경일)" }
+        : completionDateOf({ ...inv, receipts });
     if (!completion) return { kind: "none" };
 
     const others = await db.duesInvoice.findMany({

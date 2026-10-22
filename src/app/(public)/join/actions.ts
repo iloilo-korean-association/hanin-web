@@ -9,11 +9,13 @@ import {
   cfgStr,
   duesTableFrom,
   fiscalYearOf,
+  findMemberDuplicate,
   formatMoney,
   loadSettings,
   newLinkToken,
   memberLinkPath,
   nextInvoiceId,
+  normalizeMemberEmail,
   phoneLast4,
   todayManila,
   FALLBACK_TEMPLATES,
@@ -35,7 +37,6 @@ import {
   zodSummary,
   type FormResult,
 } from "../_shared";
-import { findJoinDuplicate, normalizeJoinEmail } from "./duplicate";
 
 /**
  * /join — 가입 신청 서버 액션.
@@ -47,7 +48,7 @@ import { findJoinDuplicate, normalizeJoinEmail } from "./duplicate";
  * 하는 일 (전부 서버에서, 하나의 트랜잭션 안에서)
  *   ① zod 재검증 (클라이언트 검증은 신뢰하지 않는다)
  *   ② 이중 제출 차단 — 01_회원.폼응답ID 를 멱등 키로 쓴다
- *   ③ 중복 회원 검사 — 이미 가입된(WITHDRAWN 제외) 연락처 또는 이메일 (duplicate.ts)
+ *   ③ 중복 회원 검사 — 이미 가입된(WITHDRAWN 제외) 연락처 또는 이메일 (lib/domain/memberDuplicate.ts)
  *   ④ 회원번호 결번 없이 채번 (M0001 …)
  *   ⑤ 06_회비고지 자동 생성 (회비단가표 × 회비등급)
  *   ⑥ 환영 메일을 발송함에 기록 — 알림 수신 동의가 있을 때만(가입 경로는 false 로 시작)
@@ -57,7 +58,7 @@ import { findJoinDuplicate, normalizeJoinEmail } from "./duplicate";
 
 /**
  * 가입자는 전원 정회원으로 등록한다(회원구분·회비등급 모두). 학생·법인 등은 가입 화면에서
- * "총무에게 말씀해 달라" 고 안내한다. ※ 임원 화면에 회비등급을 바꾸는 기능은 아직 없다.
+ * "총무에게 말씀해 달라" 고 안내한다. 총무는 임원 화면 /officer/members/[회원번호] 에서 바꾼다.
  */
 const JOIN_GRADE = "정회원";
 
@@ -174,19 +175,19 @@ export async function submitJoin(_prev: JoinState, formData: FormData): Promise<
   /* ⑤ 중복 회원 — 이미 가입된(WITHDRAWN 제외) 연락처 또는 이메일이면 거부.
        (대표 결정 2026-10-22: 출생연도를 안 받게 되어 '성명+출생연도+뒷4자리' 기준을 버렸다)
        기존 회원 phone 은 형식이 제각각이라 DB 에서는 phoneLast4 로 후보만 좁히고,
-       같은 번호인지는 duplicate.ts 가 JS 에서 정규화해 판정한다. 이메일은 대소문자 무시. */
+       같은 번호인지는 memberDuplicate.ts 가 JS 에서 정규화해 판정한다. 이메일은 대소문자 무시. */
   const dupCandidates = await prisma.member.findMany({
     where: {
       status: { not: "WITHDRAWN" },
       OR: [
         { phoneLast4: last4 },
         // contains — 앞뒤 공백이 섞인 채 저장된 주소도 후보로 잡는다(최종 판정은 trim 비교).
-        { email: { contains: normalizeJoinEmail(input.email), mode: "insensitive" } },
+        { email: { contains: normalizeMemberEmail(input.email), mode: "insensitive" } },
       ],
     },
     select: { phone: true, email: true, status: true },
   });
-  const dup = findJoinDuplicate(dupCandidates, { phone: input.phone, email: input.email });
+  const dup = findMemberDuplicate(dupCandidates, { phone: input.phone, email: input.email });
   if (dup) {
     // 회원번호·링크토큰·이름은 알려주지 않는다. 번호나 이메일만 넣어 보고
     // 남의 조회 링크를 받아갈 수 있게 되기 때문이다.

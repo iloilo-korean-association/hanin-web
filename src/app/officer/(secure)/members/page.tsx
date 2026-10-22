@@ -28,7 +28,7 @@ import {
   type StatItem,
 } from "@/components/ui";
 import { prisma } from "@/lib/db";
-import { cfgNum, loadSettings } from "@/lib/domain";
+import { cfgNum, isSystemMemberNo, loadSettings } from "@/lib/domain";
 import { isGuardError, requireOfficer } from "@/lib/guard";
 import { ROUTES } from "@/lib/site";
 import { MEMBER_STATUSES } from "@/lib/validators";
@@ -36,9 +36,10 @@ import { MEMBER_STATUSES } from "@/lib/validators";
 import { ResetPasswordButton } from "./ResetPasswordButton";
 
 /**
- * 회원 리스트 — 명부는 **읽기 전용**이다. 회원 정보 편집 경로를 만들지 않았다(의도).
+ * 회원 리스트 — 이 화면 자체는 열람용이다. 고치는 곳은 행마다 있는 [수정] →
+ * /officer/members/[회원번호] (대표 요청 2026-10-22, "회원관리" 권한). M9xxx 시스템 계정에는 [수정] 이 없다.
  *
- * P1 에서 딱 하나의 쓰기가 생겼다: **비밀번호 재설정**("회원관리" 권한, 임시 비밀번호 발급).
+ * 이 화면의 쓰기는 **비밀번호 재설정**("회원관리" 권한, 임시 비밀번호 발급) 하나다(P1).
  * 메일 재설정(Resend)이 보류인 동안 총무가 수동으로 발급하는 경로다.
  *
  * ★ 개인정보 화면이다. 실명·연락처·이메일이 그대로 보인다.
@@ -170,7 +171,7 @@ export default async function MembersPage({ searchParams }: { searchParams: SP }
         title="회원"
         titleEn="Members"
         breadcrumb={[{ href: ROUTES.officer, label: "임원" }]}
-        description="회원 명부 열람 화면입니다. 회원 정보는 이 화면에서 고칠 수 없습니다 — 정정이 필요하면 총무에게 요청하십시오. 비밀번호 재설정(회원관리 권한)만 가능합니다."
+        description="회원 명부입니다. 회원 정보는 각 줄의 [수정]에서 고칩니다(회원관리 권한 — 권한이 없으면 열람만 됩니다). 비밀번호는 [비밀번호 재설정]으로 임시 비밀번호를 발급합니다."
         actions={
           <LinkButton href={`${ROUTES.officer}/members/photos`} variant="primary">
             사진 검수{pendingPhotos > 0 ? ` (${pendingPhotos}건 대기)` : ""}
@@ -263,9 +264,9 @@ export default async function MembersPage({ searchParams }: { searchParams: SP }
                     <TH>동의</TH>
                     <TH>비밀번호</TH>
                     <TH>사진</TH>
-                    <TH>
-                      <span className="sr-only">작업</span>
-                    </TH>
+                    {/* 보이는 글자로 둔다 — sr-only(position:absolute) 였을 때 가로 스크롤 상자를 빠져나가
+                        페이지 전체가 옆으로 밀렸다(375px 에서 scrollWidth 1512 실측, 2026-10-22) */}
+                    <TH>작업</TH>
                   </TR>
                 </THead>
                 <TBody>
@@ -273,7 +274,23 @@ export default async function MembersPage({ searchParams }: { searchParams: SP }
                     const locked = Boolean(m.credential?.lockedUntil && m.credential.lockedUntil > now);
                     return (
                       <TR key={m.memberNo} tone={m.status === "WITHDRAWN" ? "muted" : undefined}>
-                        <TD className="font-mono text-sm">{m.memberNo}</TD>
+                        <TD>
+                          {/* [수정] 은 첫 칸에 둔다 — 표가 넓어 맨 끝 칸은 옆으로 밀어야 보인다.
+                              M9xxx 시스템 계정은 수정 화면으로 가지 않는다(서버도 거부). */}
+                          <span className="flex flex-col items-start gap-1">
+                            <span className="font-mono text-sm">{m.memberNo}</span>
+                            {!isSystemMemberNo(m.memberNo) ? (
+                              <LinkButton
+                                href={`${ROUTES.officer}/members/${m.memberNo}`}
+                                size="sm"
+                                variant="secondary"
+                                title={canReset ? undefined : `${resetBlocked} 열람만 됩니다.`}
+                              >
+                                {canReset ? "수정" : "보기"}
+                              </LinkButton>
+                            ) : null}
+                          </span>
+                        </TD>
                         <TD className="font-medium">{m.name}</TD>
                         <TD>{m.memberType}</TD>
                         <TD>

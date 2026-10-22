@@ -24,6 +24,9 @@ export * from "./membershipPeriod";
 export * from "./memberCard";
 // 06_회비고지 연 1회 일괄 고지 계획 + 고지ID 채번(가입·납부자 연결·일괄 고지가 같이 쓴다).
 export * from "./dues";
+// 회원 연락처·이메일 중복 판정(가입·임원 회원 수정·회원 본인 수정이 같이 쓴다) + 임원 회원 수정 규칙.
+export * from "./memberDuplicate";
+export * from "./memberEdit";
 export * from "./settings";
 export * from "./mail";
 // 장부 임포트 반영 규칙(L3). 파서(importXlsx.ts)는 exceljs 를 끌고 오므로 여기 넣지 않는다 —

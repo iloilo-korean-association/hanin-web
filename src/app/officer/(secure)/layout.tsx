@@ -70,7 +70,7 @@ export default async function SecureOfficerLayout({ children }: { children: Reac
       blocked: writeBlocked ?? (me.can("입력권") ? null : "입력권이 없는 직책입니다."),
     },
 
-    // 회원 명부 — 읽기 전용(v1). 개인정보 화면이라 임원(조회권) 전용이다.
+    // 회원 명부 — 열람은 조회권, 회원 정보 수정·사진 검수·비밀번호 재설정은 회원관리. 개인정보 화면이다.
     {
       href: `${ROUTES.officer}/members`,
       label: "회원",

@@ -87,27 +87,13 @@ export function newFormToken(): string {
   return crypto.randomUUID();
 }
 
-/** 숫자만 남긴다. */
-export function digitsOnly(s: string): string {
-  return String(s ?? "").replace(/\D/g, "");
-}
-
 /**
- * 같은 사람의 같은 번호인가를 판정하는 키.
- *
- * ★ 숫자만 남기는 것으로는 부족하다. 같은 휴대폰을 이렇게들 적는다:
- *     '0917 222 3344'  → 09172223344   (11자리, 국내표기)
- *     '+63 917 222 3344' → 639172223344 (12자리, 국가번호)
- *   앞자리가 달라 문자열 비교로는 다른 번호가 된다(실제로 중복 신청이 통과하는 것을 확인했다).
- *   필리핀·한국 모두 가입자 번호가 뒤쪽 10자리에 들어가므로 **뒤 10자리**로 비교한다.
- *     0917 2223344 → 9172223344   /  +63 917 2223344 → 9172223344   ✔ 일치
- *     010 1234 5678 → 1012345678  /  +82 10 1234 5678 → 1012345678  ✔ 일치
- *   10자리가 안 되면(유선 등) 있는 그대로 비교한다.
+ * digitsOnly · phoneKey(같은 번호 판정 키) — 정의는 lib/domain/memberDuplicate.ts 로 옮겼다(2026-10-22).
+ * 가입·임원 회원 수정·회원 본인 수정이 같은 중복 규칙을 써야 해서 한 곳에 모았다.
+ * 기존 호출부(행사 신청 등)를 그대로 두기 위해 여기서 다시 내보낸다.
+ * (그 파일은 import 가 없는 순수 모듈이라 클라이언트 번들에 들어가도 된다)
  */
-export function phoneKey(s: string): string {
-  const d = digitsOnly(s);
-  return d.length > 10 ? d.slice(-10) : d;
-}
+export { digitsOnly, phoneKey } from "@/lib/domain/memberDuplicate";
 
 /**
  * 거주 지역 선택지 — 구글폼 F1 문항 5 그대로.

@@ -45,22 +45,43 @@ export const joinInputSchema = z.object({
 });
 export type JoinInput = z.infer<typeof joinInputSchema>;
 
-/** 임원이 회원 정보를 고칠 때. */
+/**
+ * 임원이 회원 정보를 고칠 때 (/officer/members/[회원번호], 2026-10-22).
+ *
+ * 받는 칸 = 가입 4칸(이름·연락처·이메일 — 비밀번호는 [비밀번호 재설정] 버튼) +
+ *   가입에서 뺀 칸(출생연도·거주 지역·회비등급·비고·명부공개/알림수신 동의) + 상태.
+ * 회원구분은 받지 않는다 — 회비등급을 따라간다(domain/memberEdit.ts memberTypeForGrade).
+ * 회원번호·가입일·링크토큰은 읽기 전용이라 칸이 없다.
+ *
+ * ★ 연락처·이메일은 **비워도 된다.** 장부 임포트로 들어온 회원 대부분이 연락처·이메일 없이
+ *   등록돼 있어서(2026-10-22 운영 DB 49명 중 44명), 가입처럼 필수로 두면 그 회원들의
+ *   회비등급 하나 고치는 저장도 막힌다. 적으면 형식은 가입과 같은 규칙으로 본다.
+ * ★ 이메일은 zEmail 이 trim·소문자로 바꿔 저장한다(가입·로그인과 같은 형태).
+ */
 export const memberUpdateSchema = z.object({
-  memberNo: z.string().trim().regex(/^M\d{4,}$/),
-  name: zText(20, "성명").optional(),
-  nameEn: zOptText(60).optional(),
-  phone: zPhone.optional(),
-  email: zEmail.or(z.literal("")).optional(),
-  region: zOptText(60).optional(),
-  districtTeam: zOptText(40).optional(),
-  householdRole: zHouseholdRole.optional(),
-  memberType: zMemberType.optional(),
-  status: zMemberStatus.optional(),
-  duesGrade: zDuesGrade.optional(),
-  rosterConsent: z.boolean().optional(),
-  notifyConsent: z.boolean().optional(),
-  note: zOptText(200).optional(),
+  memberNo: zMemberNo,
+  name: zText(20, "이름"),
+  phone: z
+    .string()
+    .trim()
+    .max(30, "연락처는 30자 이내로 적어 주십시오.")
+    .refine((s) => s === "" || s.replace(/\D/g, "").length >= 7, "전화번호를 확인해 주십시오(숫자 7자리 이상). 모르면 비워 두십시오."),
+  email: zEmail.max(100, "이메일은 100자 이내로 적어 주십시오.").or(z.literal("")),
+  /** 비우면 null. 적으면 4자리 연도 */
+  birthYear: z
+    .string()
+    .trim()
+    .refine(
+      (s) => s === "" || (/^\d{4}$/.test(s) && Number(s) >= 1920 && Number(s) <= new Date().getFullYear()),
+      "출생연도는 4자리 숫자로 적거나 비워 두십시오(예: 1965).",
+    )
+    .transform((s) => (s === "" ? null : Number(s))),
+  region: zOptText(60),
+  duesGrade: zDuesGrade,
+  status: zMemberStatus,
+  note: zOptText(200),
+  rosterConsent: z.boolean(),
+  notifyConsent: z.boolean(),
 });
 export type MemberUpdate = z.infer<typeof memberUpdateSchema>;
 

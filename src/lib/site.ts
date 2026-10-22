@@ -44,7 +44,8 @@ export const EMERGENCY_NUMBER = "911";
  *                                                   ← P1 비밀번호 로그인 · P3 회원증
  *   임원(세션쿠키)    /officer, /officer/login, /officer/receipt,
  *                     /officer/expense, /officer/approve, /officer/audit,
- *                     /officer/members, /officer/members/photos
+ *                     /officer/members, /officer/members/photos,
+ *                     /officer/members/[memberNo]   ← 회원 정보 수정 (열람 조회권 · 저장 회원관리)
  *   준공개(토큰)      /verify/[token]   ← P3 회원증 진위 확인. 로그인은 없지만
  *                                          토큰을 아는 사람만 열 수 있고 noindex 다
  *   개발 전용         /dev/login, /dev/outbox        ← 프로덕션에서 404
