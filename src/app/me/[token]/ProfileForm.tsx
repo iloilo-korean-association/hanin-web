@@ -51,9 +51,10 @@ export function ProfileForm({
 
   // 원장에 이미 들어 있는 값이 목록에 없을 수도 있다. 그럴 때는 현재 값을 맨 앞에 끼워
   // 넣는다 — 안 그러면 저장 버튼을 누르는 순간 지역이 조용히 다른 값으로 바뀐다.
-  const regionOptions: string[] = (REGIONS as readonly string[]).includes(region)
+  // 빈 값(미기재)은 아래 "(선택 안 함)" 선택지가 받는다 — 4칸 가입·엑셀 등록 회원은 지역이 비어 있다.
+  const regionOptions: string[] = (REGIONS as readonly string[]).includes(region) || region === ""
     ? [...REGIONS]
-    : [region, ...REGIONS].filter((r) => r.length > 0);
+    : [region, ...REGIONS];
 
   return (
     // 인쇄할 때는 편집 폼을 뺀다. 회원이 인쇄하는 것은 영수증 목록이지 입력 칸이 아니다.
@@ -136,6 +137,7 @@ export function ProfileForm({
                 invalid={Boolean(errOf(state, "region"))}
                 {...fieldAria("me-region", { error: errOf(state, "region") })}
               >
+                <option value="">(선택 안 함)</option>
                 {regionOptions.map((r) => (
                   <option key={r} value={r}>
                     {r}
