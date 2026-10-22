@@ -35,21 +35,31 @@ import {
   zodSummary,
   type FormResult,
 } from "../_shared";
-import { JOIN_GRADES, memberTypeOf, type JoinGrade } from "./constants";
+import { findJoinDuplicate, normalizeJoinEmail } from "./duplicate";
 
 /**
  * /join — 가입 신청 서버 액션.
  *
+ * 받는 것은 이름·연락처·이메일·비밀번호 4칸 + 개인정보 동의 체크 1개뿐이다(대표 결정 2026-10-22).
+ *   회원구분·회비등급은 전원 정회원, 명부공개·알림수신 동의는 false 로 시작한다
+ *   (회원이 나중에 '내 정보' 화면에서 켠다). 출생연도는 null, 지역·비고는 "".
+ *
  * 하는 일 (전부 서버에서, 하나의 트랜잭션 안에서)
  *   ① zod 재검증 (클라이언트 검증은 신뢰하지 않는다)
  *   ② 이중 제출 차단 — 01_회원.폼응답ID 를 멱등 키로 쓴다
- *   ③ 중복 회원 검사 — 성명 + 출생연도 + 연락처 뒷4자리
+ *   ③ 중복 회원 검사 — 이미 가입된(WITHDRAWN 제외) 연락처 또는 이메일 (duplicate.ts)
  *   ④ 회원번호 결번 없이 채번 (M0001 …)
  *   ⑤ 06_회비고지 자동 생성 (회비단가표 × 회비등급)
- *   ⑥ 환영 메일을 발송함에 기록 — 실제로 보내지 않는다(/dev/outbox 에서 확인)
+ *   ⑥ 환영 메일을 발송함에 기록 — 알림 수신 동의가 있을 때만(가입 경로는 false 로 시작)
  *
  * ★ 여권번호·ACR I-Card·주민등록번호는 받지 않는다. 폼에 칸 자체가 없다.
  */
+
+/**
+ * 가입자는 전원 정회원으로 등록한다(회원구분·회비등급 모두). 학생·법인 등은 가입 화면에서
+ * "총무에게 말씀해 달라" 고 안내한다. ※ 임원 화면에 회비등급을 바꾸는 기능은 아직 없다.
+ */
+const JOIN_GRADE = "정회원";
 
 export interface JoinOk {
   memberNo: string;
@@ -110,30 +120,19 @@ export async function submitJoin(_prev: JoinState, formData: FormData): Promise<
     };
   }
 
-  /* ② 회원 구분 화이트리스트 — 폼을 직접 POST 해서 '명예' 를 넣는 것을 막는다. */
-  const gradeRaw = textOf(formData, "duesGrade");
-  if (!(JOIN_GRADES as readonly string[]).includes(gradeRaw)) {
-    return fail("회원 구분을 골라 주십시오.", null, { duesGrade: "목록에서 하나를 골라 주십시오." });
-  }
-  const grade = gradeRaw as JoinGrade;
-
-  /* ③ zod 재검증. 개인정보 동의(privacyConsent)는 스키마가 literal(true) 로 강제한다. */
-  const birthYearRaw = textOf(formData, "birthYear");
+  /* ③ zod 재검증. 개인정보 동의(privacyConsent)는 스키마가 literal(true) 로 강제한다.
+     폼에서 읽는 것은 이름·연락처·이메일·동의뿐이다. 회원구분·동의 두 가지는 여기서 고정값을
+     넣는다 — 폼을 직접 POST 해서 '명예' 등급이나 동의 값을 끼워 넣어도 무시된다.
+     (notifyConsent 는 스키마·DB 기본값이 true 라서 반드시 false 를 명시해 덮는다) */
   const parsed = joinInputSchema.safeParse({
     name: textOf(formData, "name"),
-    nameEn: textOf(formData, "nameEn"),
-    birthYear: birthYearRaw === "" ? undefined : birthYearRaw,
-    gender: textOf(formData, "gender") || "미기재",
     phone: textOf(formData, "phone"),
     email: textOf(formData, "email"),
-    region: textOf(formData, "region"),
-    householdRole: textOf(formData, "householdRole") || "본인",
-    memberType: memberTypeOf(grade),
-    duesGrade: grade,
-    rosterConsent: boolOf(formData, "rosterConsent"),
-    notifyConsent: boolOf(formData, "notifyConsent"),
+    memberType: JOIN_GRADE,
+    duesGrade: JOIN_GRADE,
+    rosterConsent: false,
+    notifyConsent: false,
     privacyConsent: boolOf(formData, "privacyConsent"),
-    note: textOf(formData, "note"),
   });
 
   if (!parsed.success) {
@@ -141,12 +140,11 @@ export async function submitJoin(_prev: JoinState, formData: FormData): Promise<
   }
   const input = parsed.data;
 
-  /* ③-1 비밀번호 (P1) — 가입 즉시 회원번호(아이디)+비밀번호 로그인이 가능해야 한다.
+  /* ③-1 비밀번호 (P1) — 가입 즉시 회원번호 또는 이메일 + 비밀번호로 로그인이 가능해야 한다.
      joinInputSchema 와 별도로 parse 한다: 비밀번호 평문이 input 객체에 섞여
-     로그·직렬화 경로로 새는 것을 막기 위해서다. */
+     로그·직렬화 경로로 새는 것을 막기 위해서다. 확인 칸은 없다(폼의 '보기' 토글로 대신). */
   const pwParsed = joinPasswordSchema.safeParse({
     password: String(formData.get("password") ?? ""),
-    passwordConfirm: String(formData.get("passwordConfirm") ?? ""),
   });
   if (!pwParsed.success) {
     return fail(zodSummary(pwParsed.error), "빨간 글씨가 붙은 칸을 고쳐 주십시오.", zodFieldErrors(pwParsed.error));
@@ -154,13 +152,6 @@ export async function submitJoin(_prev: JoinState, formData: FormData): Promise<
   // 해시는 트랜잭션 밖에서 미리 만든다 — bcrypt 는 느려서 트랜잭션을 붙잡으면 안 된다.
   const passwordHash = await hashPassword(pwParsed.data.password);
 
-  // 출생연도는 중복 검사 키다. 스키마에서는 선택이지만 가입 폼에서는 받는다.
-  if (input.birthYear === undefined) {
-    return fail("출생연도를 적어 주십시오.", "중복 가입을 막는 데 쓰입니다. 예: 1968", {
-      birthYear: "태어난 해 4자리를 적어 주십시오. 예: 1968",
-    });
-  }
-  const birthYear = input.birthYear;
   const last4 = phoneLast4(input.phone);
   if (!last4 || last4.length < 4) {
     return fail("연락처를 확인해 주십시오.", "숫자가 최소 4자리는 있어야 합니다. 예: 0917 123 4567", {
@@ -180,24 +171,37 @@ export async function submitJoin(_prev: JoinState, formData: FormData): Promise<
     );
   }
 
-  /* ⑤ 중복 회원 — 성명 + 출생연도 + 연락처 뒷4자리 */
-  const dup = await prisma.member.findFirst({
+  /* ⑤ 중복 회원 — 이미 가입된(WITHDRAWN 제외) 연락처 또는 이메일이면 거부.
+       (대표 결정 2026-10-22: 출생연도를 안 받게 되어 '성명+출생연도+뒷4자리' 기준을 버렸다)
+       기존 회원 phone 은 형식이 제각각이라 DB 에서는 phoneLast4 로 후보만 좁히고,
+       같은 번호인지는 duplicate.ts 가 JS 에서 정규화해 판정한다. 이메일은 대소문자 무시. */
+  const dupCandidates = await prisma.member.findMany({
     where: {
-      name: input.name,
-      birthYear,
-      phoneLast4: last4,
       status: { not: "WITHDRAWN" },
+      OR: [
+        { phoneLast4: last4 },
+        // contains — 앞뒤 공백이 섞인 채 저장된 주소도 후보로 잡는다(최종 판정은 trim 비교).
+        { email: { contains: normalizeJoinEmail(input.email), mode: "insensitive" } },
+      ],
     },
-    select: { memberNo: true },
+    select: { phone: true, email: true, status: true },
   });
+  const dup = findJoinDuplicate(dupCandidates, { phone: input.phone, email: input.email });
   if (dup) {
-    // 회원번호·링크토큰은 알려주지 않는다. 이름·출생연도·번호 뒷자리만 맞히면
+    // 회원번호·링크토큰·이름은 알려주지 않는다. 번호나 이메일만 넣어 보고
     // 남의 조회 링크를 받아갈 수 있게 되기 때문이다.
+    const what = dup.phone && dup.email ? "연락처·이메일" : dup.phone ? "연락처" : "이메일";
+    const fields: Record<string, string> = {
+      // JoinForm 이 이 키를 보고 로그인 / 비밀번호 찾기 링크를 띄운다(입력 칸과 무관한 표시용 키).
+      duplicate: what,
+    };
+    if (dup.phone) fields.phone = "이미 가입된 연락처입니다.";
+    if (dup.email) fields.email = "이미 가입된 이메일입니다.";
     return fail(
-      "이미 등록된 회원 정보와 일치합니다.",
-      `성명·출생연도·연락처 뒷 4자리가 같은 회원이 이미 있습니다. 본인이시라면 새로 가입하실 필요가 없습니다. ` +
-        `조회 링크를 잃어버리셨다면 총무(${contactEmail || "한인회"})에게 재발송을 요청해 주십시오.`,
-      { name: "이미 등록된 회원입니다." },
+      `이미 가입된 ${what}입니다.`,
+      `본인이시라면 새로 가입하실 필요 없이 로그인하시면 됩니다. ` +
+        `비밀번호를 잊으셨으면 총무(${contactEmail || "한인회"})에게 연락해 주십시오.`,
+      fields,
     );
   }
 
@@ -226,7 +230,7 @@ export async function submitJoin(_prev: JoinState, formData: FormData): Promise<
           memberNo,
           name: input.name,
           nameEn: input.nameEn,
-          birthYear,
+          birthYear: null, // 가입 폼에서 받지 않는다(2026-10-22)
           gender: input.gender,
           phone: input.phone,
           phoneLast4: last4,
@@ -293,7 +297,9 @@ export async function submitJoin(_prev: JoinState, formData: FormData): Promise<
   }
 
   /* ⑧ 환영 메일 — 실제 발송이 아니라 발송함(OutboxMail)에 기록한다.
-       알림 수신에 동의하지 않으셨으면 보내지 않는다(F1 문항 8의 약속). */
+       알림 수신에 동의하지 않으셨으면 보내지 않는다(F1 문항 8의 약속).
+       ※ 2026-10-22 부터 가입 경로는 notifyConsent=false 로 시작하므로 지금은 보내지 않는다.
+         기본값을 다시 켜는 날을 위해 코드는 남겨 둔다. */
   let mailQueued = false;
   if (input.notifyConsent && input.email) {
     const { subject, bodyHtml } = renderFromSettings(

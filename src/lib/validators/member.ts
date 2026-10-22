@@ -9,9 +9,13 @@ import { zDuesGrade, zGender, zHouseholdRole, zMemberStatus, zMemberType } from 
  *   "나중에 필요할지 모르니 받아 두자" 가 개인정보 사고의 시작이다.
  */
 
-/** 공개 가입 폼 (/join). 임원이 아니라 본인이 낸다. */
+/**
+ * 공개 가입 폼 (/join). 임원이 아니라 본인이 낸다.
+ * 폼이 받는 것은 성명·연락처·이메일(+비밀번호·개인정보 동의)뿐이다(2026-10-22).
+ * 회원구분·회비등급·동의 두 가지는 actions.ts 가 고정값을 넣고, 나머지는 기본값으로 채운다.
+ */
 export const joinInputSchema = z.object({
-  name: zText(20, "성명"),
+  name: zText(20, "이름"), // 가입 폼 라벨이 '이름' 이다(2026-10-22)
   nameEn: zOptText(60),
   birthYear: z
     .union([z.string(), z.number()])
@@ -83,16 +87,14 @@ export const zMemberPassword = z
   .min(8, "비밀번호는 8자 이상으로 정해 주십시오.")
   .max(72, "비밀번호는 72자 이내로 정해 주십시오.");
 
-/** 가입 폼의 비밀번호 쌍. joinInputSchema 와 별도로 parse 한다(기존 소비처 불변). */
-export const joinPasswordSchema = z
-  .object({
-    password: zMemberPassword,
-    passwordConfirm: z.string(),
-  })
-  .refine((d) => d.password === d.passwordConfirm, {
-    path: ["passwordConfirm"],
-    message: "비밀번호 확인이 일치하지 않습니다. 같은 값을 두 번 입력해 주십시오.",
-  });
+/**
+ * 가입 폼의 비밀번호. joinInputSchema 와 별도로 parse 한다(기존 소비처 불변).
+ * 확인 칸은 없다(대표 결정 2026-10-22 — 가입은 4칸). 대신 폼에 '보기' 토글이 있다.
+ * /me/password 변경(memberPasswordChangeSchema)은 확인 칸을 그대로 받는다.
+ */
+export const joinPasswordSchema = z.object({
+  password: zMemberPassword,
+});
 export type JoinPasswordInput = z.infer<typeof joinPasswordSchema>;
 
 /** 로그인한 회원 본인의 비밀번호 변경 (/me/password). */

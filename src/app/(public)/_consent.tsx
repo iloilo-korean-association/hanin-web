@@ -6,6 +6,11 @@ import { Alert } from "@/components/ui";
  * ★ 원문은 `02_노코드MVP/구글폼/폼5종_문항정의.md` 의 "개인정보 수집·이용 동의서 전문"이다.
  *   법적 문구이므로 **문장을 고치지 않았다.** 아래 텍스트는 그 파일에서 그대로 옮긴 것이다.
  *
+ * ★ 예외 — 제2항(수집 항목)과 영문 요약의 "Data collected" 는 2026-10-22 에 고쳤다.
+ *   가입 폼이 이름·연락처·이메일·비밀번호 4칸으로 줄어(대표 결정) 출생연도·회원 구분을
+ *   더 이상 받지 않는다. 받지 않는 항목을 '필수 수집' 으로 고지해 두면 고지가 사실과 다르다.
+ *   거주 지역은 가입 때 받지 않지만 '내 정보' 에서 넣을 수 있어 [선택] 으로 옮겼다.
+ *
  * 대괄호 자리(`[총무 이메일을 여기에 적으세요]` 등)는 원문이 "여기에 채워 넣으라"고
  * 지시한 **빈칸**이다. 빈칸을 그대로 두면 동의서가 성립하지 않으므로 12_임원 테이블의
  * 실제 값으로 채운다. 문장 자체는 손대지 않았다.
@@ -38,9 +43,10 @@ function fullText(c: DpoContact): string {
    ⑤ 영사 협조가 필요한 긴급 상황(사고·재해·수감 등)에서의 본인 확인
 
 2. 수집하는 개인정보 항목
-   [필수] 성명, 출생연도, 휴대전화번호, 이메일 주소, 거주 지역, 회원 구분
-   [선택] 명부 공개 동의 여부, 알림 수신 동의 여부
-   [자동 생성] 회원번호, 가입일시, 동의일시, 조회용 링크토큰
+   [필수] 성명, 휴대전화번호, 이메일 주소
+   [선택] 거주 지역, 명부 공개 동의 여부, 알림 수신 동의 여부
+          (가입 후 '내 정보' 화면에서 직접 정하실 수 있습니다)
+   [자동 생성] 회원번호, 회원 구분, 가입일시, 동의일시, 조회용 링크토큰
    ※ 주민등록번호, 여권번호, ACR I-Card 번호, 은행 계좌번호는 수집하지 않습니다.
    ※ 건강·종교·정치성향 등 민감정보(RA 10173상 sensitive personal information)는
       수집하지 않습니다. 다만 행사 신청 시 본인이 자발적으로 적으신 식이·알러지 정보는
@@ -117,8 +123,10 @@ const ENGLISH_SUMMARY = `【Privacy Notice — Iloilo Korean Association】
 Purpose: membership administration, annual dues collection and receipting,
 event and emergency notifications, and accounting records for audit.
 
-Data collected: name, year of birth, mobile number, email, area of residence,
-membership type. We do NOT collect government ID numbers, passport numbers,
+Data collected: name, mobile number and email (required); area of residence
+and your roster/notification preferences (optional, set later in My Info).
+Membership number and type are assigned by the association.
+We do NOT collect government ID numbers, passport numbers,
 ACR I-Card numbers, bank account numbers, or sensitive personal information
 as defined under RA 10173.
 
@@ -178,16 +186,18 @@ export function PrivacyConsentFull({ contact }: { contact: DpoContact }) {
               <LegalBlock text={`${ENGLISH_SUMMARY}\n\nData Protection Officer: ${contact.treasurerEmail} / ${contact.treasurerPhone}\nEffective: 2026-01-01`} />
             </div>
           </details>
+
+          {/* 경고는 전문을 펼친 사람에게 전문과 함께 보인다. 접힌 상태에서까지 띄우면
+              모바일 가입 화면이 한 화면을 넘는다(2026-10-22 가입 4칸 단순화). */}
+          <Alert tone="warn" title="[운영 전 확인] 동의서 제5항">
+            <p className="text-sm">
+              위 전문은 구글 폼·스프레드시트 운영을 전제로 작성된 원문입니다. 이 시스템으로 실제
+              전환하실 때는 제5항(처리 위탁 — Google LLC)을 실제 수탁자와 서버 소재지에 맞게 개정해야
+              합니다. 프로토타입에서는 법적 문구를 임의로 고치지 않고 원문 그대로 두었습니다.
+            </p>
+          </Alert>
         </div>
       </details>
-
-      <Alert tone="warn" title="[운영 전 확인] 동의서 제5항">
-        <p className="text-sm">
-          위 전문은 구글 폼·스프레드시트 운영을 전제로 작성된 원문입니다. 이 시스템으로 실제
-          전환하실 때는 제5항(처리 위탁 — Google LLC)을 실제 수탁자와 서버 소재지에 맞게 개정해야
-          합니다. 프로토타입에서는 법적 문구를 임의로 고치지 않고 원문 그대로 두었습니다.
-        </p>
-      </Alert>
     </div>
   );
 }
