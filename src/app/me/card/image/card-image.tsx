@@ -6,7 +6,7 @@ import { ImageResponse } from "next/og";
 import { buildQrPath } from "@/components/ui/QrCode";
 import { formatPeriodDate, type MembershipPeriod } from "@/lib/domain/membershipPeriod";
 
-import { CARD_COLORS, CARD_LAYOUT, photoPlaceholderSvg, svgToDataUrl } from "../../_portal/card-art";
+import { CARD_COLORS, CARD_FONTS, CARD_LAYOUT, photoPlaceholderSvg, svgToDataUrl } from "../../_portal/card-art";
 
 /**
  * 디지털 회원증 PNG 렌더러 (P3 — "이미지로 저장").
@@ -31,11 +31,15 @@ import { CARD_COLORS, CARD_LAYOUT, photoPlaceholderSvg, svgToDataUrl } from "../
  *  화면은 같은 파일을 CSS background 로 쓴다. 제목·엠블럼·라벨·알약 테·QR 금테·안내문은
  *  전부 그 그림 안에 있어서 여기서 그리지 않는다.
  *
- * ── 한글 폰트 ────────────────────────────────────────────────────────────
+ * ── 글꼴 ────────────────────────────────────────────────────────────────
  *  satori 에는 CJK 폰트가 없다 → 폰트 버퍼를 넘겨야 한다. 운영 서버(Vercel, 리눅스)에는
- *  한글 시스템 폰트가 없고 외부 CDN 호출은 금지라, OFL 폰트(Noto Sans KR)를 **KS X 1001
- *  한글 2350자 + ASCII 서브셋**으로 잘라 ./fonts 에 커밋해 두고 fs 로 읽는다.
- *  (출처·라이선스·만든 방법은 fonts/README.md)
+ *  한글 시스템 폰트가 없고 외부 CDN 호출은 금지라, 서브셋 TTF 를 ./fonts 에 커밋해 두고 fs 로 읽는다.
+ *  (출처·라이선스·글자 범위·만든 방법은 fonts/README.md)
+ *   · 이름(한글)          : 배민 을지로체 서브셋 — KS X 1001 한글 2350자 + ASCII
+ *   · 회원번호·유효기간   : 나눔명조 Bold 서브셋 — 숫자·영문·. ~ - : 만
+ *   · 구분 알약·영문 이름·"사진 없음"·폴백 : Noto Sans KR 서브셋(400/700)
+ *  어느 글꼴을 어디에 쓰는지·배율은 card-art.ts 의 CARD_FONTS / CARD_LAYOUT(fontScale)이 정본이고,
+ *  화면(MemberIdCard.tsx)은 **같은 TTF 파일**을 next/font/local 로 쓴다(card-fonts.ts).
  *  ★ 2350자 밖의 희귀 한글 음절(예: '똠')은 빈 칸으로 찍힌다 — 회원 이름에 그런 글자가
  *    나오면 fonts/README.md 의 절차로 서브셋에 추가한다.
  *
@@ -51,7 +55,8 @@ export const CARD_IMAGE_SIZE = { width: 1712, height: 1080 } as const;
 /** globals.css `font-size: calc(100cqw / 34.24)` 와 같은 비율 → 1712px 카드에서 1em = 50px */
 const EM = CARD_IMAGE_SIZE.width / 34.24;
 
-const FONT_FAMILY = "Noto Sans KR";
+/** 바탕 글꼴(폴백·구분 알약·영문 이름·"사진 없음") — 이름·숫자는 요소에서 CARD_FONTS 로 덮는다 */
+const FONT_FAMILY = CARD_FONTS.label.family;
 
 /* ───────────────────────── 폰트 ───────────────────────── */
 
@@ -60,7 +65,7 @@ type FontOption = { name: string; data: Buffer; weight: 400 | 700; style: "norma
 let fontsPromise: Promise<FontOption[]> | null = null;
 
 /**
- * 폰트는 프로세스에 한 번만 읽는다(두 파일 합쳐 약 830KB).
+ * 폰트는 프로세스에 한 번만 읽는다(네 파일 합쳐 약 2.3MB — 을지로체 한글 2350자가 1.4MB).
  * 경로를 리터럴로 적는 이유: Next 의 output tracing 이 fs 호출의 **리터럴 인자**를 보고
  * 배포 산출물에 파일을 포함시킨다. 변수로 합치면 추적이 빠진다(next.config.ts 의
  * outputFileTracingIncludes 가 2중 안전장치).
@@ -70,10 +75,14 @@ function loadFonts(): Promise<FontOption[]> {
     fontsPromise = Promise.all([
       readFile(join(process.cwd(), "src/app/me/card/image/fonts/NotoSansKR-Regular.subset.ttf")),
       readFile(join(process.cwd(), "src/app/me/card/image/fonts/NotoSansKR-Bold.subset.ttf")),
+      readFile(join(process.cwd(), "src/app/me/card/image/fonts/BMEuljiro.subset.ttf")),
+      readFile(join(process.cwd(), "src/app/me/card/image/fonts/NanumMyeongjo-Bold.subset.ttf")),
     ])
-      .then(([regular, bold]): FontOption[] => [
+      .then(([regular, bold, euljiro, myeongjoBold]): FontOption[] => [
         { name: FONT_FAMILY, data: regular, weight: 400, style: "normal" },
         { name: FONT_FAMILY, data: bold, weight: 700, style: "normal" },
+        { name: CARD_FONTS.name.family, data: euljiro, weight: CARD_FONTS.name.weight, style: "normal" },
+        { name: CARD_FONTS.number.family, data: myeongjoBold, weight: CARD_FONTS.number.weight, style: "normal" },
       ])
       .catch((e: unknown) => {
         fontsPromise = null; // 다음 요청에서 다시 시도
@@ -189,6 +198,10 @@ export async function renderMemberCardImage(input: MemberCardImageInput): Promis
     borderRadius: px(L.photo.radius),
   } as const;
   const qrPx = px(L.qr.size);
+  // 글꼴별 보정 배율을 곱한 실제 글자 크기(em) — 화면(MemberIdCard.tsx)과 같은 식
+  const nameFs = L.name.fontSize * L.name.fontScale;
+  const memberNoFs = L.memberNo.fontSize * L.memberNo.fontScale;
+  const periodFs = L.period.fontSize * L.period.fontScale;
 
   return new ImageResponse(
     (
@@ -265,18 +278,27 @@ export async function renderMemberCardImage(input: MemberCardImageInput): Promis
             maxWidth: px(L.name.maxWidth),
             display: "flex",
             alignItems: "flex-end",
-            fontSize: px(L.name.fontSize),
-            fontWeight: 700,
-            letterSpacing: px(L.name.fontSize * L.name.tracking),
+            fontSize: px(nameFs),
             lineHeight: 1,
             whiteSpace: "nowrap",
           }}
         >
-          <div style={{ flexShrink: 0 }}>{input.name}</div>
+          {/* 한글 이름 — 을지로체(400 하나뿐. 700 을 적으면 satori 가 폴백으로 넘어간다) */}
+          <div
+            style={{
+              flexShrink: 0,
+              fontFamily: CARD_FONTS.name.family,
+              fontWeight: CARD_FONTS.name.weight,
+              letterSpacing: px(nameFs * L.name.tracking),
+            }}
+          >
+            {input.name}
+          </div>
           {input.nameEn ? (
             <div
               style={{
                 marginLeft: px(L.nameEn.gap),
+                fontFamily: FONT_FAMILY,
                 fontSize: px(L.nameEn.fontSize),
                 fontWeight: 700,
                 letterSpacing: px(L.nameEn.fontSize * 0.04),
@@ -302,9 +324,10 @@ export async function renderMemberCardImage(input: MemberCardImageInput): Promis
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            fontSize: px(L.memberNo.fontSize),
-            fontWeight: 700,
-            letterSpacing: px(L.memberNo.fontSize * L.memberNo.tracking),
+            fontFamily: CARD_FONTS.number.family,
+            fontWeight: CARD_FONTS.number.weight,
+            fontSize: px(memberNoFs),
+            letterSpacing: px(memberNoFs * L.memberNo.tracking),
             lineHeight: 1,
             whiteSpace: "nowrap",
           }}
@@ -339,8 +362,9 @@ export async function renderMemberCardImage(input: MemberCardImageInput): Promis
             position: "absolute",
             left: px(L.period.left),
             top: px(L.period.top),
-            fontSize: px(L.period.fontSize),
-            fontWeight: 700,
+            fontFamily: CARD_FONTS.number.family,
+            fontWeight: CARD_FONTS.number.weight,
+            fontSize: px(periodFs),
             lineHeight: 1,
             whiteSpace: "nowrap",
           }}

@@ -31,23 +31,49 @@ export const CARD_COLORS = {
 } as const;
 
 /**
+ * 회원증 글꼴 (대표 결정 2026-11-01 — 글꼴 견본 시트를 보고 고른 조합).
+ *  · 이름(한글)          : 배민 을지로체 (BM EULJIRO) — 원본 디자인의 붓글씨 느낌에 가장 가깝다
+ *  · 회원번호 · 유효기간  : 나눔명조 Bold — 원본의 세리프 숫자
+ *  · 회원구분 알약 · 영문 이름 · "사진 없음" : 그대로 고딕(화면 = 시스템 고딕, PNG = Noto Sans KR Bold)
+ *
+ * 글꼴 파일은 card/image/fonts/ 에 **한 벌**만 있다(서브셋 TTF). PNG 는 fs 로 읽고(card-image.tsx),
+ * 화면은 같은 파일을 next/font/local 로 self-host 한다(card-fonts.ts). 같은 파일·같은 배율이라 모양이 같다.
+ * family 는 satori 에 등록하는 이름이다 — 화면은 next/font 가 자기 이름을 만들어 className 으로 붙인다.
+ *  ★ 을지로체는 굵기 400 하나뿐이다. 700 을 요구하면 브라우저가 가짜 볼드를 만들어 PNG 와 달라진다.
+ *  ★ 'IKA Card Name' 은 서브셋 파일 안의 패밀리 이름이기도 하다 — 을지로체 원본은 OFL 로 Reserved Font Name
+ *    ('BM EULJIRO')이 걸려 있어 수정본(서브셋)은 그 이름을 쓸 수 없다(fonts/LICENSE_BMEULJIRO.txt).
+ */
+export const CARD_FONTS = {
+  name: { family: "IKA Card Name", weight: 400 },
+  number: { family: "Nanum Myeongjo", weight: 700 },
+  label: { family: "Noto Sans KR", weight: 700 },
+} as const;
+
+/**
  * 가변 요소 자리 (em). 원본 픽셀(1579 폭 기준) → em = px / 46.115.
- * 글자 크기는 Noto Sans KR Bold 로 원본 글자의 잉크 높이를 맞춘 값이다 — 원본의 붓글씨·세리프
- * 글꼴은 없으므로 크기·위치만 맞춘다.
+ *
+ * 글자 크기: fontSize 는 **Noto Sans KR Bold 기준**으로 원본 글자의 잉크 높이를 맞춘 값이고,
+ * fontScale 은 CARD_FONTS 의 글꼴로 바꿨을 때 같은 잉크 높이가 되는 배율이다(실제 크기 = fontSize × fontScale).
+ * 배율과 top 은 PNG 를 원본 디자인과 같은 좌표계(1579px)로 맞춰 잉크 bbox 를 비교해 정했다(2026-11-01):
+ *  · 이름 "박정우" 2.24em: Noto 잉크 316×104 → 을지로 ×0.990 → 원본 293×97 / 결과 262×94, 세로 중심 차 0.5px
+ *  · 숫자 "0" 1em: Noto 잉크 25×39 → 나눔명조 Bold ×1.000 → 회원번호 원본 167×39 / 결과 164×39 (차 0px)
+ *  · top: 글꼴마다 글자가 줄 상자 안에 앉는 높이가 달라서 Noto 기준 top 에 을지로 +0.195em, 명조 +0.076/+0.087em
+ *    을 더해 원본 글자의 세로 중심에 맞췄다(이름 8.457→8.652, 회원번호 12.902→12.978, 유효기간 16.004→16.091).
+ * 글꼴을 바꾸면 fontScale 과 top 을 다시 잰다 — 두 렌더러(화면·PNG)가 이 숫자를 그대로 쓴다.
  */
 export const CARD_LAYOUT = {
   /** 사진: 금테 안쪽 x 95~406, y 337~751. 테와 사이에 틈이 안 보이게 사방 1px 겹친다 */
   photo: { left: 2.038, top: 7.286, width: 6.809, height: 9.043, radius: 0.3 },
-  /** 이름 줄: 잉크 x 467~759, y 396~492 (3자). 한글 이름 + (있을 때만) 영문 이름이 한 줄 */
-  name: { left: 9.975, top: 8.457, maxWidth: 14.1, fontSize: 2.24, tracking: 0.08 },
+  /** 이름 줄: 잉크 x 467~759, y 396~492 (3자). 한글 이름(을지로체) + (있을 때만) 영문 이름(고딕)이 한 줄 */
+  name: { left: 9.975, top: 8.652, maxWidth: 14.1, fontSize: 2.24, fontScale: 0.99, tracking: 0.08 },
   /** 영문 이름: 한글 이름 오른쪽, 아래 정렬. 디자인에 자리가 없어 작게 */
   nameEn: { fontSize: 0.6, gap: 0.5 },
-  /** 회원번호 알약(플레이트에 있음) x 461~721, y 595~659 — 그 안에 글자만 가운데 */
-  memberNo: { left: 9.997, top: 12.902, width: 5.638, height: 1.388, fontSize: 1.1, tracking: 0.05 },
+  /** 회원번호 알약(플레이트에 있음) x 461~721, y 595~659 — 그 안에 글자(나눔명조 Bold)만 가운데 */
+  memberNo: { left: 9.997, top: 12.978, width: 5.638, height: 1.388, fontSize: 1.1, fontScale: 1, tracking: 0.05 },
   /** 회원구분 알약(플레이트에 있음) x 798~1036, y 596~658 — 그 안에 흰 글자만 가운데 */
   memberType: { left: 17.305, top: 12.924, width: 5.161, height: 1.344, fontSize: 1 },
-  /** 유효기간: 숫자 잉크 x 470~1018, y 745~779 */
-  period: { left: 10.149, top: 16.004, fontSize: 1 },
+  /** 유효기간: 숫자 잉크 x 470~1018, y 745~779 (나눔명조 Bold) */
+  period: { left: 10.149, top: 16.091, fontSize: 1, fontScale: 1 },
   /** QR: 금테 안 흰 상자 x 1140~1477, y 348~676 — 그 안에 정사각형으로 가운데 */
   qr: { left: 24.822, top: 7.546, size: 7.134 },
   /** 카드 모서리. 원본의 둥근 모서리(반지름 40px)보다 조금 작게 잘라 바깥 흰 귀퉁이가 안 보이게 */

@@ -2,6 +2,7 @@ import { cn, QrCode } from "@/components/ui";
 import { formatPeriodDate, type MembershipPeriod } from "@/lib/domain/membershipPeriod";
 
 import { CARD_LAYOUT, photoPlaceholderSvg, svgToDataUrl } from "./card-art";
+import { cardNameFont, cardNumberFont } from "./card-fonts";
 
 /**
  * 디지털 회원증 (P3).
@@ -21,8 +22,12 @@ import { CARD_LAYOUT, photoPlaceholderSvg, svgToDataUrl } from "./card-art";
  *  DOM 에 있는 것은 **가변 요소 여섯 가지뿐** — 사진, 이름(+영문), 회원번호, 회원구분, 유효기간,
  *  QR — 이고 전부 절대 위치다. 자리(em)는 card-art.ts 의 CARD_LAYOUT 이 정본이고 PNG
  *  (card/image/card-image.tsx)도 같은 숫자로 그린다. 레이아웃을 바꾸면 그 파일도 같이 고친다.
- *  글꼴: 원본의 붓글씨·세리프 글꼴은 없다. 시스템 고딕(PNG 는 Noto Sans KR Bold)으로
- *  크기·위치만 맞춘다. 숫자도 고딕 — PNG 와 모양을 같게 두는 쪽을 택했다.
+ *  글꼴(대표 결정 2026-11-01): 이름 = 배민 을지로체, 회원번호·유효기간 = 나눔명조 Bold —
+ *  PNG 가 fs 로 읽는 **같은 서브셋 TTF** 를 next/font/local 로 쓴다(card-fonts.ts). 어느 글꼴·어느 배율인지는
+ *  card-art.ts 의 CARD_FONTS / CARD_LAYOUT(fontScale)이 정본이다. 회원구분 알약·영문 이름·"사진 없음" 은
+ *  그대로 고딕(화면 = 시스템 고딕, PNG = Noto Sans KR Bold).
+ *  ★ 이름 요소는 font-normal 이어야 한다 — 을지로체는 400 하나뿐이라 font-bold 를 주면 브라우저가
+ *    가짜 볼드를 만들어 PNG 와 달라진다.
  *
  * ── 인쇄 잉크 ───────────────────────────────────────────────────────────
  *  바탕 그림을 **그대로 찍는다.** 이 프로젝트의 인쇄 원칙(흰 바탕·검정 글씨)은 결산·감사
@@ -64,6 +69,10 @@ export function MemberIdCard({
 }) {
   const L = CARD_LAYOUT;
   const em = (n: number): string => `${n}em`;
+  // 글꼴별 보정 배율을 곱한 실제 글자 크기(em) — PNG(card-image.tsx)와 같은 식
+  const nameFs = L.name.fontSize * L.name.fontScale;
+  const memberNoFs = L.memberNo.fontSize * L.memberNo.fontScale;
+  const periodFs = L.period.fontSize * L.period.fontScale;
 
   return (
     <div data-id-card-frame className={cn("w-full max-w-[342px]", className)}>
@@ -118,17 +127,20 @@ export function MemberIdCard({
           className="absolute"
           style={{ left: em(L.name.left), top: em(L.name.top), maxWidth: em(L.name.maxWidth) }}
         >
-          <p
-            className="flex items-end leading-none font-bold whitespace-nowrap"
-            style={{ fontSize: em(L.name.fontSize), letterSpacing: em(L.name.tracking) }}
-          >
+          <p className="flex items-end leading-none whitespace-nowrap" style={{ fontSize: em(nameFs) }}>
             <span className="sr-only">성명 </span>
-            <span className="shrink-0">{name}</span>
+            {/* 한글 이름 — 을지로체. letter-spacing 은 이 요소의 em(= 실제 글자 크기) 기준 */}
+            <span
+              className={cn(cardNameFont.className, "shrink-0 font-normal")}
+              style={{ letterSpacing: em(L.name.tracking) }}
+            >
+              {name}
+            </span>
             {nameEn ? (
               <span
                 className="min-w-0 truncate font-semibold tracking-[0.04em] text-card-ink/70"
                 style={{
-                  fontSize: `${L.nameEn.fontSize / L.name.fontSize}em`,
+                  fontSize: `${L.nameEn.fontSize / nameFs}em`,
                   marginLeft: `${L.nameEn.gap / L.nameEn.fontSize}em`,
                 }}
               >
@@ -149,8 +161,8 @@ export function MemberIdCard({
           }}
         >
           <p
-            className="leading-none font-bold whitespace-nowrap"
-            style={{ fontSize: em(L.memberNo.fontSize), letterSpacing: em(L.memberNo.tracking) }}
+            className={cn(cardNumberFont.className, "leading-none font-bold whitespace-nowrap")}
+            style={{ fontSize: em(memberNoFs), letterSpacing: em(L.memberNo.tracking) }}
           >
             <span className="sr-only">회원번호 </span>
             {memberNo}
@@ -178,7 +190,10 @@ export function MemberIdCard({
 
         {/* ── 유효기간 ── */}
         <div className="absolute" style={{ left: em(L.period.left), top: em(L.period.top) }}>
-          <p className="leading-none font-bold whitespace-nowrap" style={{ fontSize: em(L.period.fontSize) }}>
+          <p
+            className={cn(cardNumberFont.className, "leading-none font-bold whitespace-nowrap")}
+            style={{ fontSize: em(periodFs) }}
+          >
             <span className="sr-only">유효기간 </span>
             {formatPeriodDate(period.validFrom)} ~ {formatPeriodDate(period.validUntil)}
           </p>

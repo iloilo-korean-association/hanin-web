@@ -15,7 +15,8 @@ const nextConfig: NextConfig = {
   // 압축/최적화는 기본값을 그대로 쓴다.
   poweredByHeader: false,
 
-  // 회원증 PNG(/me/card/image)가 fs 로 읽는 한글 서브셋 폰트와 배경 플레이트를 배포 산출물에 포함시킨다.
+  // 회원증 PNG(/me/card/image)가 fs 로 읽는 서브셋 폰트 네 벌(Noto 400/700 · 을지로체 · 나눔명조 Bold, 전부
+  // fonts/*.ttf 가 덮는다)과 배경 플레이트를 배포 산출물에 포함시킨다.
   // 코드가 경로를 리터럴로 적어 자동 추적도 되지만, 추적이 빠지면 운영에서만 파일이 없어
   // 한글이 두부(□)로 찍히거나 바탕이 비는 사고가 나므로 명시한다.
   outputFileTracingIncludes: {
