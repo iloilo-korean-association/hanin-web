@@ -167,6 +167,8 @@ function qrDataUrl(value: string, px: number): string {
 
 export type MemberCardImageInput = {
   name: string;
+  /** 성명_영문(대문자). "" 이면 영문 줄을 그리지 않는다 — 한글 이름 위치는 그대로 */
+  nameEn: string;
   memberNo: string;
   memberType: string;
   /** 오늘 유효한 회원 기간 — verdict.period. 화면 카드와 같은 값 */
@@ -384,6 +386,23 @@ export async function renderMemberCardImage(input: MemberCardImageInput): Promis
               >
                 {input.name}
               </div>
+              {/* 영문 이름(선택) — 화면의 mt-[0.2em] text-[0.72em] font-semibold tracking-[0.08em] text-white/80.
+                  비어 있으면 그리지 않는다. 이 블록은 위 정렬(space-between 의 첫 자식)이라 한글 이름 위치는 안 움직인다 */}
+              {input.nameEn ? (
+                <div
+                  style={{
+                    marginTop: px(0.72 * 0.2),
+                    fontSize: px(0.72),
+                    fontWeight: 700,
+                    letterSpacing: px(0.72 * 0.08),
+                    lineHeight: 1,
+                    color: white(0.8),
+                    ...truncate,
+                  }}
+                >
+                  {input.nameEn}
+                </div>
+              ) : null}
             </div>
 
             {/* 화면의 dl grid-cols-2: 1줄 = 회원번호 | 회원구분, 2줄 = 유효기간(전체 폭) */}

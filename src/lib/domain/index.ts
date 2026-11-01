@@ -27,8 +27,6 @@ export * from "./dues";
 // 회원 연락처·이메일 중복 판정(가입·임원 회원 수정·회원 본인 수정이 같이 쓴다) + 임원 회원 수정 규칙.
 export * from "./memberDuplicate";
 export * from "./memberEdit";
-// 회원 포털 관문 순서(임시 비밀번호 → 영문 이름 → 포털). /me 와 /me/[token] 이 같이 쓴다.
-export * from "./portalGate";
 export * from "./settings";
 export * from "./mail";
 // 장부 임포트 반영 규칙(L3). 파서(importXlsx.ts)는 exceljs 를 끌고 오므로 여기 넣지 않는다 —

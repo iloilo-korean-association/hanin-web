@@ -29,11 +29,13 @@ function errOf(state: MeUpdateState, key: string): string | null {
 /**
  * 회원 본인이 고칠 수 있는 것만 있는 폼.
  *
- * 회원번호·성명·회비등급·상태는 여기 없다. 폼에 없으면 서버 스키마에도 없어서
+ * 회원번호·성명(한글)·회비등급·상태는 여기 없다. 폼에 없으면 서버 스키마에도 없어서
  * 폼을 직접 조작해 보내도 무시된다(memberSelfUpdateSchema).
+ * 영문 이름은 **선택** 칸으로 본인이 넣고 고친다(2026-11-01) — 저장되면 회원증에 바로 찍힌다.
  */
 export function ProfileForm({
   token,
+  nameEn,
   phone,
   email,
   region,
@@ -41,6 +43,8 @@ export function ProfileForm({
   notifyConsent,
 }: {
   token: string;
+  /** 성명_영문(대문자). 비어 있으면 "" — 회원증에 한글 이름만 나간다 */
+  nameEn: string;
   phone: string;
   email: string;
   region: string;
@@ -64,7 +68,7 @@ export function ProfileForm({
       <Card>
         <CardHeader
           title="내 정보 수정"
-          description="연락처와 동의 항목은 직접 고치실 수 있습니다. 성명(한글·영문)·회원번호·회비등급 변경은 총무에게 말씀해 주십시오."
+          description="영문 이름·연락처·동의 항목은 직접 고치실 수 있습니다. 성명(한글)·회원번호·회비등급 변경은 총무에게 말씀해 주십시오."
         />
         <CardBody>
           {state.status === "error" ? (
@@ -93,6 +97,28 @@ export function ProfileForm({
           ) : null}
 
           <FormStack>
+            <Field
+              htmlFor="me-nameEn"
+              label="영문 이름 (선택)"
+              labelEn="Name in English"
+              hint="여권의 영문 표기와 같게. 예: HONG GILDONG (비워 두셔도 됩니다). 저장하시면 회원증에 바로 반영됩니다."
+              error={errOf(state, "nameEn")}
+            >
+              <Input
+                id="me-nameEn"
+                name="nameEn"
+                maxLength={60}
+                autoComplete="off"
+                autoCapitalize="characters"
+                autoCorrect="off"
+                spellCheck={false}
+                placeholder="HONG GILDONG"
+                defaultValue={nameEn}
+                invalid={Boolean(errOf(state, "nameEn"))}
+                {...fieldAria("me-nameEn", { hint: true, error: errOf(state, "nameEn") })}
+              />
+            </Field>
+
             <Field
               htmlFor="me-phone"
               label="연락처"

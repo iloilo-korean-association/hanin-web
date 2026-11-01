@@ -31,6 +31,8 @@ export type MemberCardData = {
   member: {
     memberNo: string;
     name: string;
+    /** 성명_영문(대문자). "" 이면 회원증(화면·PNG)이 영문 줄을 그리지 않는다 */
+    nameEn: string;
     memberType: string;
     status: string;
     linkToken: string;
@@ -60,7 +62,7 @@ export async function loadMemberCardData(memberNo: string): Promise<MemberCardDa
   const [member, card, invoices] = await Promise.all([
     prisma.member.findUniqueOrThrow({
       where: { memberNo },
-      select: { memberNo: true, name: true, memberType: true, status: true, linkToken: true },
+      select: { memberNo: true, name: true, nameEn: true, memberType: true, status: true, linkToken: true },
     }),
     prisma.memberCard.findUnique({
       where: { memberNo },

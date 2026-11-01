@@ -67,6 +67,7 @@ export async function GET(req: NextRequest): Promise<Response> {
   try {
     const image = await renderMemberCardImage({
       name: data.member.name,
+      nameEn: data.member.nameEn,
       memberNo: data.member.memberNo,
       memberType: data.member.memberType,
       period,

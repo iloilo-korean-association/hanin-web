@@ -32,8 +32,8 @@ function errOf(state: JoinState, key: string): string | null {
 }
 
 /**
- * 가입 폼 — 이름·영문 이름·연락처·이메일·비밀번호 5칸 + 개인정보 동의 체크 1개
- * (대표 결정 2026-10-22 4칸, 영문 이름은 2026-11-01 추가·필수).
+ * 가입 폼 — 이름·연락처·이메일·비밀번호 4칸 + 영문 이름(선택) 1칸 + 개인정보 동의 체크 1개
+ * (대표 결정 2026-10-22 4칸, 영문 이름 선택 칸은 2026-11-01 — 비우면 회원증에 한글 이름만 나간다).
  * 회원 구분은 고르지 않는다(전원 정회원). 명부공개·알림수신은 가입 후 '내 정보' 에서 켠다.
  */
 export function JoinForm({
@@ -103,16 +103,14 @@ export function JoinForm({
 
             <Field
               htmlFor="nameEn"
-              label="영문 이름"
+              label="영문 이름 (선택)"
               labelEn="Name in English"
-              required
-              hint="여권의 영문 표기와 같게 적어 주십시오. 예: HONG GILDONG (소문자로 적으셔도 대문자로 저장됩니다)"
+              hint="여권의 영문 표기와 같게. 예: HONG GILDONG (비워 두셔도 됩니다. 적으시면 회원증에 한글 이름 아래 함께 찍힙니다)"
               error={errOf(state, "nameEn")}
             >
               <Input
                 id="nameEn"
                 name="nameEn"
-                required
                 maxLength={60}
                 autoComplete="off"
                 autoCapitalize="characters"
@@ -218,7 +216,7 @@ export function JoinForm({
                 name="privacyConsent"
                 required
                 label="개인정보 수집·이용에 동의합니다 (필수)"
-                description="성명(한글·영문)·연락처·이메일을 회원 관리·회비 안내에만 씁니다."
+                description="성명·연락처·이메일(적으셨다면 영문 이름)을 회원 관리·회비 안내에만 씁니다."
                 aria-invalid={errOf(state, "privacyConsent") ? true : undefined}
               />
               {errOf(state, "privacyConsent") ? (
@@ -297,9 +295,11 @@ function JoinSuccess({
         <p className="mt-1">
           로그인 아이디는 <b>회원번호</b> 또는 가입하신 <b>이메일</b>({state.mailTo}) 중 편한 것을 쓰시면 됩니다.
         </p>
-        <p className="mt-1">
-          영문 이름은 <b>{state.nameEn}</b> 으로 등록되었습니다. 여권 표기와 다르면 총무에게 말씀해 주십시오.
-        </p>
+        {state.nameEn ? (
+          <p className="mt-1">
+            영문 이름은 <b>{state.nameEn}</b> 으로 등록되었습니다. 여권 표기와 다르면 '내 정보' 에서 직접 고치실 수 있습니다.
+          </p>
+        ) : null}
       </Alert>
 
       <Card>

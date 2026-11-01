@@ -46,6 +46,8 @@ import { CARD_ORG_NAME_EN, cardWatermarkSvg, EMBLEM_PUBLIC_PATH, svgToDataUrl } 
  */
 export function MemberIdCard({
   name,
+  /** 성명_영문(대문자). "" 이면 영문 줄을 그리지 않는다 — 한글 이름만 보인다(대표 결정 2026-11-01) */
+  nameEn,
   memberNo,
   memberType,
   /** 오늘 유효한 회원 기간 — evaluateMemberCard 의 verdict.period (유효할 때만 이 카드를 그린다) */
@@ -58,6 +60,7 @@ export function MemberIdCard({
   className,
 }: {
   name: string;
+  nameEn: string;
   memberNo: string;
   memberType: string;
   period: MembershipPeriod;
@@ -133,6 +136,14 @@ export function MemberIdCard({
               <p className="mt-[0.25em] truncate text-[2.1em] leading-[1.15] font-bold tracking-[-0.02em]">
                 {name}
               </p>
+              {/* 영문 이름(선택) — 한글 이름 바로 아래 한 줄. 비어 있으면 줄 자체를 그리지 않는다.
+                  이 이름 블록은 justify-between 의 첫 자식(위 정렬)이라 영문 줄이 있든 없든 한글 이름 위치는 같다.
+                  PNG(card-image.tsx)도 같은 em 값(0.72em · 자간 0.08em · 흰색 80%)으로 그린다 */}
+              {nameEn ? (
+                <p className="mt-[0.2em] truncate text-[0.72em] leading-none font-semibold tracking-[0.08em] text-white/80">
+                  {nameEn}
+                </p>
+              ) : null}
             </div>
 
             <dl className="grid grid-cols-2 gap-x-[1em] gap-y-[0.5em] leading-none">

@@ -288,6 +288,7 @@ export async function MemberPortal({
               <div className="flex flex-col gap-3">
                 <MemberIdCard
                   name={cardData.member.name}
+                  nameEn={cardData.member.nameEn}
                   memberNo={cardData.member.memberNo}
                   memberType={cardData.member.memberType}
                   period={cardData.verdict.period}
@@ -585,6 +586,7 @@ export async function MemberPortal({
         {/* ── 정보 수정 — token="" 이면 액션이 세션으로 본인을 특정한다 ── */}
         <ProfileForm
           token={mode === "token" ? member.linkToken : ""}
+          nameEn={member.nameEn}
           phone={member.phone}
           email={member.email}
           region={member.region}

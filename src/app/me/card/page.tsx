@@ -115,6 +115,7 @@ export default async function MemberCardPage({
           <>
             <MemberIdCard
               name={data.member.name}
+              nameEn={data.member.nameEn}
               memberNo={data.member.memberNo}
               memberType={data.member.memberType}
               period={period}

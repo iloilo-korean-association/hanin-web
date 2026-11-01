@@ -19,8 +19,9 @@ import { boolOf, fail, textOf, zodFieldErrors, zodSummary, type FormResult } fro
  *   폼에 실려 온 회원번호는 쳐다보지도 않는다. M0001 은 순차라서 옆 사람 것을 넣어보는 데 3초면 된다.
  *   requireMember(token) 이 돌려준 memberNo 로만 update 한다.
  *
- * ★ 본인이 고칠 수 있는 것은 연락처·이메일·지역·동의 두 가지뿐이다(memberSelfUpdateSchema).
- *   회비등급·상태·회원번호는 폼에 보내도 무시된다 — 스키마에 칸이 없다.
+ * ★ 본인이 고칠 수 있는 것은 영문 이름(선택, 2026-11-01)·연락처·이메일·지역·동의 두 가지뿐이다
+ *   (memberSelfUpdateSchema). 한글 성명·회비등급·상태·회원번호는 폼에 보내도 무시된다 — 스키마에 칸이 없다.
+ *   영문 이름은 저장되는 순간 회원증(/me/card·PNG)에 그대로 찍힌다.
  *
  * ★ 연락처·이메일을 바꾸면 다른 회원(탈퇴 제외)과 겹치는지 본다 — 가입·임원 수정과 같은 규칙.
  *
@@ -37,6 +38,7 @@ export type MeUpdateState = FormResult<MeUpdateOk>;
 
 /** 화면에 보여줄 한글 라벨. 감사로그의 열이름도 이 값을 쓴다. */
 const LABEL: Record<string, string> = {
+  nameEn: "성명_영문",
   phone: "연락처",
   email: "이메일",
   region: "주소_지역",
@@ -61,6 +63,7 @@ export async function updateMyInfo(
   }
 
   const parsed = memberSelfUpdateSchema.safeParse({
+    nameEn: textOf(formData, "nameEn"), // 선택 — zNameEnOrEmpty 가 "" 통과, 값은 대문자로 정규화
     phone: textOf(formData, "phone"),
     email: textOf(formData, "email"),
     region: textOf(formData, "region"),
@@ -74,7 +77,7 @@ export async function updateMyInfo(
 
   const before = await prisma.member.findUnique({
     where: { memberNo: me.memberNo },
-    select: { phone: true, email: true, region: true, rosterConsent: true, notifyConsent: true },
+    select: { nameEn: true, phone: true, email: true, region: true, rosterConsent: true, notifyConsent: true },
   });
   if (!before) {
     return fail("회원 정보를 찾을 수 없습니다.", "총무에게 문의해 주십시오.");
@@ -85,6 +88,7 @@ export async function updateMyInfo(
   const pushIf = (field: string, b: string, a: string) => {
     if (b !== a) diffs.push({ field, before: b, after: a });
   };
+  pushIf("nameEn", before.nameEn, input.nameEn ?? before.nameEn);
   pushIf("phone", before.phone, input.phone ?? before.phone);
   pushIf("email", before.email, input.email ?? before.email);
   pushIf("region", before.region, input.region ?? before.region);
@@ -138,6 +142,7 @@ export async function updateMyInfo(
       await tx.member.update({
         where: { memberNo: me.memberNo }, // ★ 폼 값이 아니라 토큰에서 나온 값
         data: {
+          nameEn: input.nameEn ?? before.nameEn,
           phone: newPhone,
           // 중복 검사 키다. 번호를 바꾸면 함께 다시 뽑아야 한다.
           phoneLast4: phoneLast4(newPhone),

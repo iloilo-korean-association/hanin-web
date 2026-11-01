@@ -108,7 +108,7 @@ export default async function MembersPage({ searchParams }: { searchParams: SP }
       ? {
           OR: [
             { name: { contains: q } },
-            // 영문 이름은 대문자로 저장된다(zNameEn) — 검색어도 올려서 본다
+            // 영문 이름은 대문자로 저장된다(zNameEnOrEmpty) — 검색어도 올려서 본다
             { nameEn: { contains: q.toUpperCase() } },
             { memberNo: { contains: q.toUpperCase() } },
             { phone: { contains: q } },

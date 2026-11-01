@@ -41,8 +41,8 @@ import {
 /**
  * /join — 가입 신청 서버 액션.
  *
- * 받는 것은 이름·영문 이름·연락처·이메일·비밀번호 5칸 + 개인정보 동의 체크 1개뿐이다
- * (대표 결정 2026-10-22 4칸, 영문 이름은 2026-11-01 추가·필수 — 여권 표기, 대문자로 저장).
+ * 받는 것은 이름·연락처·이메일·비밀번호 4칸 + 영문 이름(선택) + 개인정보 동의 체크 1개뿐이다
+ * (대표 결정 2026-10-22 4칸, 영문 이름 선택 칸은 2026-11-01 — 여권 표기, 적으면 대문자로 저장, 비우면 "").
  *   회원구분·회비등급은 전원 정회원, 명부공개·알림수신 동의는 false 로 시작한다
  *   (회원이 나중에 '내 정보' 화면에서 켠다). 출생연도는 null, 지역·비고는 "".
  *
@@ -131,7 +131,7 @@ export async function submitJoin(_prev: JoinState, formData: FormData): Promise<
      (notifyConsent 는 스키마·DB 기본값이 true 라서 반드시 false 를 명시해 덮는다) */
   const parsed = joinInputSchema.safeParse({
     name: textOf(formData, "name"),
-    nameEn: textOf(formData, "nameEn"), // 필수 — zNameEn 이 대문자로 정규화한다
+    nameEn: textOf(formData, "nameEn"), // 선택 — zNameEnOrEmpty 가 "" 통과, 값은 대문자로 정규화
     phone: textOf(formData, "phone"),
     email: textOf(formData, "email"),
     memberType: JOIN_GRADE,

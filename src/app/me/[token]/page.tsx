@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
 
 import {
   Alert,
@@ -9,7 +8,6 @@ import {
   PageHeader,
   Stack,
 } from "@/components/ui";
-import { nextPortalGate } from "@/lib/domain";
 import { isGuardError, requireMember } from "@/lib/guard";
 import { ROUTES } from "@/lib/site";
 
@@ -24,8 +22,7 @@ import { SessionBridge } from "./SessionBridge";
  *   ① 토큰 인증 (requireMember)
  *   ② 세션 동시 발급 (SessionBridge) — 링크로 들어온 회원도 다음부터는
  *      /me 로 다닐 수 있게 세션 쿠키를 심어 둔다 (P1).
- *   ③ 영문 이름 관문 (2026-11-01) — 비어 있으면 /me/name-en?token= 으로 보낸다(세션 /me 와 같은 규칙,
- *      domain/portalGate.ts). 매직링크에는 비밀번호가 없으니 mustChange 관문은 없다.
+ *   관문은 없다 — 매직링크에는 비밀번호가 없고, 영문 이름은 선택이다(대표 결정 2026-11-01).
  *
  * ★ 비공개 화면이다. 검색엔진에 절대 들어가면 안 된다.
  *   robots 메타 + next.config.ts 의 X-Robots-Tag + Referrer-Policy: no-referrer 3중으로 막는다.
@@ -89,11 +86,6 @@ export default async function MyPage({
       );
     }
     throw e;
-  }
-
-  // 영문 이름이 비어 있으면 포털 대신 등록 관문으로. 토큰을 그대로 붙여 같은 신원으로 저장하게 한다.
-  if (nextPortalGate({ mustChange: false, nameEn: me.nameEn }) === "name-en") {
-    redirect(`${ROUTES.meNameEn}?token=${encodeURIComponent(me.linkToken)}`);
   }
 
   return (
