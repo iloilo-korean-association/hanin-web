@@ -1,8 +1,7 @@
 import { cn, QrCode } from "@/components/ui";
 import { formatPeriodDate, type MembershipPeriod } from "@/lib/domain/membershipPeriod";
-import { ORG_NAME } from "@/lib/site";
 
-import { CARD_ORG_NAME_EN, cardWatermarkSvg, EMBLEM_PUBLIC_PATH, svgToDataUrl } from "./card-art";
+import { CARD_LAYOUT, photoPlaceholderSvg, svgToDataUrl } from "./card-art";
 
 /**
  * 디지털 회원증 (P3).
@@ -11,33 +10,28 @@ import { CARD_ORG_NAME_EN, cardWatermarkSvg, EMBLEM_PUBLIC_PATH, svgToDataUrl } 
  *  화면에서는 폭에 맞춰 줄어들고, 인쇄하면 **실물 카드 규격(CR80 85.6×54mm)** 으로
  *  고정된다. 제휴 업소에 내미는 물건이라 지갑에 들어가야 하기 때문이다.
  *  치수 규칙은 globals.css 의 `[data-id-card]` 한 곳에 있다 —
- *  카드 안의 글자·사진·QR·엠블럼은 전부 em 이라 그 한 줄(font-size)만 바뀌면 같이 커진다.
+ *  카드 안의 글자·사진·QR 은 전부 em 이라 그 한 줄(font-size)만 바뀌면 같이 커진다.
  *  바깥 틀 `[data-id-card-frame]` 이 컨테이너라, 틀의 max-width 만 바꾸면 카드가 통째로
  *  커진다(/me/card 에서는 400px, 포털에서는 342px).
  *
+ * ── 모습: 대표가 준 디자인 그대로 (2026-11) ────────────────────────────
+ *  바탕은 대표의 디자인 그림에서 가변 요소만 지운 **플레이트**(public/brand/card-plate.jpg,
+ *  globals.css 가 background 로 깐다). 제목·엠블럼·라벨·아이콘·알약 테·QR 금테·"스캔하면
+ *  진위 확인"·하단 안내문은 그 그림 안에 있어서 여기 DOM 에는 없다.
+ *  DOM 에 있는 것은 **가변 요소 여섯 가지뿐** — 사진, 이름(+영문), 회원번호, 회원구분, 유효기간,
+ *  QR — 이고 전부 절대 위치다. 자리(em)는 card-art.ts 의 CARD_LAYOUT 이 정본이고 PNG
+ *  (card/image/card-image.tsx)도 같은 숫자로 그린다. 레이아웃을 바꾸면 그 파일도 같이 고친다.
+ *  글꼴: 원본의 붓글씨·세리프 글꼴은 없다. 시스템 고딕(PNG 는 Noto Sans KR Bold)으로
+ *  크기·위치만 맞춘다. 숫자도 고딕 — PNG 와 모양을 같게 두는 쪽을 택했다.
+ *
  * ── 인쇄 잉크 ───────────────────────────────────────────────────────────
- *  남색 바탕을 **그대로 찍는다.** 이 프로젝트의 인쇄 원칙(흰 바탕·검정 글씨)은 결산·감사
+ *  바탕 그림을 **그대로 찍는다.** 이 프로젝트의 인쇄 원칙(흰 바탕·검정 글씨)은 결산·감사
  *  자료용이고, 회원증은 실물 신분증처럼 보여야 한다는 대표 결정(2026-10)에 따라 예외다.
  *  globals.css 의 인쇄 블록이 카드 범위에만 `print-color-adjust: exact` 를 걸어
- *  바탕·흰 글씨·금색 선을 보존하고, QR 과 사진은 원본 그대로 찍는다.
- *  (브라우저 인쇄 설정의 "배경 그래픽" 을 꺼도 이 속성이 있으면 바탕이 나온다.)
- *
- * ── 시각 언어: "한국스럽게" (대표 요청 2026-11) ──────────────────────────
- *  태극기의 어법을 신분증의 격으로 옮겼다 — 기념품이 아니라 주민등록증 쪽이다.
- *  · 바탕: 쪽빛→먹색 남색(card-navy-800/900). 글자는 흰색, 회원번호·테·영문 표기는 금색.
- *  · 머리선·"회원증" 표기는 금색 그대로(대표 확인 2026-11-01 — 홍청 띠·붉은 인장은 되돌렸다).
- *  · 라벨: "회원번호 · NO." 처럼 한글 + 영문 병기(회원구분 · TYPE / 유효기간 · VALID). 스캔 안내는 한글만.
- *  · 워터마크: 흐린 태극기(기울어진 태극 + 건곤감리, 흰색 2.5~6%) — card-art.ts 의 SVG 한 장이
- *    `[data-id-card-art]` 한 겹에만 깔린다. 정보 요소 위에 아무것도 덧칠하지 않는다 —
- *    특히 QR 위에 반투명한 것이 겹치면 스캔이 깨진다.
- *  머리의 엠블럼은 한인회 공식 로고(public/brand/logo-emblem.svg — 글자까지 path 로 그린
- *  벡터)라 어떤 크기에서도 선명하다. 흰 원판이 남색 위에 떠 보이도록 금색 링을 두른다.
- *  PNG(card/image/card-image.tsx)는 **같은 파일·같은 문자열·같은 em 값**으로 그린다.
- *  레이아웃을 바꾸면 그 파일도 같이 고친다.
+ *  배경 그림·알약 흰 글씨를 보존하고, QR 과 사진은 원본 그대로 찍는다.
  *
  * ── 유효기간 칸 (대표 결정 2026-10-21) ──────────────────────────────────
  *  "유효연도 2026년" 대신 **회비 납부일부터 1년** 인 기간을 `2026.10.15 ~ 2027.10.14` 로 찍는다.
- *  반쪽 칸에는 들어가지 않는 길이라 배치를 바꿨다: 1줄 = 회원번호 | 회원구분, 2줄 = 유효기간(전체 폭).
  *  기간은 판정 결과(verdict.period)를 받은 그대로다 — 여기서 날짜를 계산하지 않는다.
  *
  * ── 이 컴포넌트는 판정하지 않는다 ───────────────────────────────────────
@@ -46,7 +40,7 @@ import { CARD_ORG_NAME_EN, cardWatermarkSvg, EMBLEM_PUBLIC_PATH, svgToDataUrl } 
  */
 export function MemberIdCard({
   name,
-  /** 성명_영문(대문자). "" 이면 영문 줄을 그리지 않는다 — 한글 이름만 보인다(대표 결정 2026-11-01) */
+  /** 성명_영문(대문자). "" 이면 영문을 그리지 않는다 — 한글 이름만 보인다(대표 결정 2026-11-01) */
   nameEn,
   memberNo,
   memberType,
@@ -68,123 +62,142 @@ export function MemberIdCard({
   verifyUrl: string;
   className?: string;
 }) {
+  const L = CARD_LAYOUT;
+  const em = (n: number): string => `${n}em`;
+
   return (
     <div data-id-card-frame className={cn("w-full max-w-[342px]", className)}>
       <div
         data-id-card
-        className="relative flex flex-col overflow-hidden rounded-[1.2em] px-[1.2em] pt-[0.9em] pb-[0.8em] text-white shadow-[0_1.6em_3.2em_-1.6em_rgba(20,45,74,0.6)]"
+        className="relative overflow-hidden text-card-ink shadow-[0_1.6em_3.2em_-1.6em_rgba(20,45,74,0.6)]"
+        style={{ borderRadius: em(L.radius) }}
       >
-        {/* ── 바탕 장식 (정보 요소 아래 한 겹) ── */}
-        <div aria-hidden="true" data-id-card-art className="pointer-events-none absolute inset-0">
-          {/* eslint-disable-next-line @next/next/no-img-element -- 인라인 데이터 URL. 최적화 대상이 아니다 */}
-          <img src={svgToDataUrl(cardWatermarkSvg())} alt="" className="block h-full w-full" />
-        </div>
-
-        {/* ── 머리: 엠블럼 + 워드마크 | 카드 종류 ── */}
-        <div className="relative flex items-center justify-between gap-[0.8em]">
-          <div className="flex min-w-0 items-center gap-[0.7em]">
-            <div className="shrink-0 rounded-full border-[0.14em] border-accent-300 bg-white shadow-[0_0.3em_0.9em_rgba(0,0,0,0.35)]">
-              {/* eslint-disable-next-line @next/next/no-img-element -- 정적 SVG. 벡터라 next/image 가 할 일이 없다 */}
-              <img
-                src={EMBLEM_PUBLIC_PATH}
-                alt=""
-                className="block h-[4.3em] w-[4.3em] rounded-full"
-              />
-            </div>
-            <div className="min-w-0 leading-none">
-              {/* 한글 단체명이 주인공 — 굵게·조금 넓은 자간. 영문은 보조 */}
-              <p className="truncate text-[1.45em] font-bold tracking-[0.04em]">{ORG_NAME}</p>
-              <p className="mt-[0.4em] truncate text-[0.5em] font-semibold tracking-[0.12em] text-white/65 uppercase">
-                {CARD_ORG_NAME_EN}
-              </p>
-            </div>
-          </div>
-          <div className="shrink-0 text-right leading-none">
-            <p className="text-[0.85em] font-semibold">회원증</p>
-            <p className="mt-[0.35em] text-[0.55em] font-semibold tracking-[0.18em] text-accent-300 uppercase">
-              Membership Card
-            </p>
-          </div>
-        </div>
-
-        {/* 금색 머리선 */}
-        <div
-          aria-hidden="true"
-          className="relative mt-[0.55em] h-[0.1em] bg-gradient-to-r from-accent-300 via-accent-300/70 to-transparent"
-        />
-
-        {/* ── 몸통 ── */}
-        <div className="relative flex flex-1 items-center gap-[1em] pt-[0.65em]">
-          {photoViewUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element -- 만료되는 서명 URL. next/image 최적화 캐시에 올리면 안 된다
+        {/* ── 사진 (플레이트의 금테 안) ── */}
+        {photoViewUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element -- 만료되는 서명 URL. next/image 최적화 캐시에 올리면 안 된다
+          <img
+            src={photoViewUrl}
+            alt={`${name} 회원 사진`}
+            className="absolute object-cover"
+            style={{
+              left: em(L.photo.left),
+              top: em(L.photo.top),
+              width: em(L.photo.width),
+              height: em(L.photo.height),
+              borderRadius: em(L.photo.radius),
+            }}
+          />
+        ) : (
+          <div
+            className="absolute flex flex-col items-center justify-end overflow-hidden"
+            style={{
+              left: em(L.photo.left),
+              top: em(L.photo.top),
+              width: em(L.photo.width),
+              height: em(L.photo.height),
+              borderRadius: em(L.photo.radius),
+            }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element -- 인라인 데이터 URL. 최적화 대상이 아니다 */}
             <img
-              src={photoViewUrl}
-              alt={`${name} 회원 사진`}
-              className="h-[10.6em] w-[7.95em] shrink-0 rounded-[0.55em] border-[0.14em] border-accent-300 object-cover"
+              src={svgToDataUrl(photoPlaceholderSvg())}
+              alt=""
+              className="absolute inset-0 block h-full w-full"
             />
-          ) : (
-            <div className="flex h-[10.6em] w-[7.95em] shrink-0 items-center justify-center rounded-[0.55em] border-[0.12em] border-dashed border-white/35 bg-white/5 text-[0.8em] text-white/60">
+            <span className="relative mb-[0.6em] text-[0.7em] leading-none font-semibold text-card-ink/55">
               사진 없음
-            </div>
-          )}
-
-          <div className="flex min-w-0 flex-1 flex-col self-stretch justify-between py-[0.2em]">
-            <div className="min-w-0">
-              <p className="text-[0.62em] leading-none font-semibold tracking-[0.08em] text-white/60">
-                성명 · NAME
-              </p>
-              <p className="mt-[0.25em] truncate text-[2.1em] leading-[1.15] font-bold tracking-[-0.02em]">
-                {name}
-              </p>
-              {/* 영문 이름(선택) — 한글 이름 바로 아래 한 줄. 비어 있으면 줄 자체를 그리지 않는다.
-                  이 이름 블록은 justify-between 의 첫 자식(위 정렬)이라 영문 줄이 있든 없든 한글 이름 위치는 같다.
-                  PNG(card-image.tsx)도 같은 em 값(0.72em · 자간 0.08em · 흰색 80%)으로 그린다 */}
-              {nameEn ? (
-                <p className="mt-[0.2em] truncate text-[0.72em] leading-none font-semibold tracking-[0.08em] text-white/80">
-                  {nameEn}
-                </p>
-              ) : null}
-            </div>
-
-            <dl className="grid grid-cols-2 gap-x-[1em] gap-y-[0.5em] leading-none">
-              <div className="min-w-0">
-                <dt className="text-[0.62em] font-semibold tracking-[0.08em] text-white/60">
-                  회원번호 · NO.
-                </dt>
-                <dd className="mt-[0.3em] truncate font-mono text-[1.15em] font-semibold tracking-[0.12em] text-accent-200">
-                  {memberNo}
-                </dd>
-              </div>
-              <div className="min-w-0">
-                <dt className="text-[0.62em] font-semibold tracking-[0.08em] text-white/60">회원구분 · TYPE</dt>
-                <dd className="mt-[0.3em] truncate text-[1em] font-semibold">{memberType}</dd>
-              </div>
-              <div className="col-span-2 min-w-0">
-                <dt className="text-[0.62em] font-semibold tracking-[0.08em] text-white/60">유효기간 · VALID</dt>
-                <dd className="mt-[0.3em] truncate text-[1em] font-semibold">
-                  {formatPeriodDate(period.validFrom)} ~ {formatPeriodDate(period.validUntil)}
-                </dd>
-              </div>
-            </dl>
-          </div>
-
-          <div className="flex shrink-0 flex-col items-center gap-[0.35em]">
-            {/* QR 은 자체 흰 바탕을 갖지만, 남색 위에서 경계가 또렷하도록 흰 상자에 한 번 더 담는다 */}
-            <div className="rounded-[0.5em] bg-white p-[0.3em]">
-              <QrCode
-                value={verifyUrl}
-                label="회원증 진위 확인 페이지를 여는 QR 코드"
-                className="h-[8.6em] w-[8.6em]"
-              />
-            </div>
-            <span className="text-[0.68em] leading-none font-semibold text-white/75">
-              스캔하면 진위 확인
             </span>
           </div>
+        )}
+
+        {/* ★ 자리(left/top)는 카드 em 으로 잡고, 글자 크기는 그 **안쪽** 요소에만 건다.
+            같은 요소에 font-size 와 em 좌표를 함께 주면 좌표가 그 글자 크기 배로 틀어진다. */}
+
+        {/* ── 이름 (+ 영문, 있을 때만). 둘 다 아래 정렬이라 영문이 있든 없든 한글 자리는 같다 ── */}
+        <div
+          className="absolute"
+          style={{ left: em(L.name.left), top: em(L.name.top), maxWidth: em(L.name.maxWidth) }}
+        >
+          <p
+            className="flex items-end leading-none font-bold whitespace-nowrap"
+            style={{ fontSize: em(L.name.fontSize), letterSpacing: em(L.name.tracking) }}
+          >
+            <span className="sr-only">성명 </span>
+            <span className="shrink-0">{name}</span>
+            {nameEn ? (
+              <span
+                className="min-w-0 truncate font-semibold tracking-[0.04em] text-card-ink/70"
+                style={{
+                  fontSize: `${L.nameEn.fontSize / L.name.fontSize}em`,
+                  marginLeft: `${L.nameEn.gap / L.nameEn.fontSize}em`,
+                }}
+              >
+                {nameEn}
+              </span>
+            ) : null}
+          </p>
         </div>
 
-        {/* ── 꼬리 ── */}
-        <p className="relative mt-[0.6em] border-t-[0.08em] border-white/15 pt-[0.4em] text-[0.68em] leading-[1.3] text-white/65">
+        {/* ── 회원번호 (플레이트의 금테 알약 안) ── */}
+        <div
+          className="absolute flex items-center justify-center"
+          style={{
+            left: em(L.memberNo.left),
+            top: em(L.memberNo.top),
+            width: em(L.memberNo.width),
+            height: em(L.memberNo.height),
+          }}
+        >
+          <p
+            className="leading-none font-bold whitespace-nowrap"
+            style={{ fontSize: em(L.memberNo.fontSize), letterSpacing: em(L.memberNo.tracking) }}
+          >
+            <span className="sr-only">회원번호 </span>
+            {memberNo}
+          </p>
+        </div>
+
+        {/* ── 회원구분 (플레이트의 남색 알약 안, 흰 글자) ── */}
+        <div
+          className="absolute flex items-center justify-center"
+          style={{
+            left: em(L.memberType.left),
+            top: em(L.memberType.top),
+            width: em(L.memberType.width),
+            height: em(L.memberType.height),
+          }}
+        >
+          <p
+            className="leading-none font-bold whitespace-nowrap text-white"
+            style={{ fontSize: em(L.memberType.fontSize) }}
+          >
+            <span className="sr-only">회원구분 </span>
+            {memberType}
+          </p>
+        </div>
+
+        {/* ── 유효기간 ── */}
+        <div className="absolute" style={{ left: em(L.period.left), top: em(L.period.top) }}>
+          <p className="leading-none font-bold whitespace-nowrap" style={{ fontSize: em(L.period.fontSize) }}>
+            <span className="sr-only">유효기간 </span>
+            {formatPeriodDate(period.validFrom)} ~ {formatPeriodDate(period.validUntil)}
+          </p>
+        </div>
+
+        {/* ── QR (플레이트의 금테 흰 상자 안). 자체 흰 여백(quiet zone)을 갖는다 ── */}
+        <div
+          className="absolute"
+          style={{ left: em(L.qr.left), top: em(L.qr.top), width: em(L.qr.size), height: em(L.qr.size) }}
+        >
+          <QrCode
+            value={verifyUrl}
+            label="회원증 진위 확인 페이지를 여는 QR 코드"
+            className="h-full w-full"
+          />
+        </div>
+
+        {/* 플레이트 그림 안의 안내문 — 스크린리더용 */}
+        <p className="sr-only">
           회비 납부일부터 1년간 유효합니다. 진위는 QR 로 확인해 주십시오 — 화면 캡처는 확인
           근거가 되지 않습니다.
         </p>

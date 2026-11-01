@@ -72,12 +72,8 @@
   /* ── 디지털 회원증 전용 ──────────────────────────────────────────────────
      정본은 me/_portal/card-art.ts 의 CARD_COLORS — PNG 렌더러가 그 상수로 그리므로
      여기 값과 **항상 같아야** 한다. 다른 화면에서는 쓰지 않는다.
-     card-navy : 쪽빛에 먹을 섞은 남색(brand-800/900 보다 깊다) — 카드 바탕
-     taegeuk   : 태극 홍·청. 머리 띠와 "회원증" 인장에만 */
-  --color-card-navy-800: #10264a;
-  --color-card-navy-900: #0a1730;
-  --color-taegeuk-hong: #c8102e;
-  --color-taegeuk-cheong: #2064c6;
+     card-ink : 대표 디자인 그림의 이름·날짜·회원번호 글자에서 샘플링한 남색 */
+  --color-card-ink: #0b1d47;
 
   /* ── 글자 색 위계 ────────────────────────────────────────────────────────
      ink-muted 까지가 본문에 써도 되는 대비(흰 배경 기준 WCAG AA 4.5:1 이상).
@@ -247,14 +243,10 @@
     width: 100%;
     aspect-ratio: 856 / 540;
     font-size: calc(100cqw / 34.24);
-    /* 바탕: 쪽빛 남색 → 먹색 남색. 글자는 전부 흰색(컴포넌트에서 text-white) */
-    background: linear-gradient(135deg, var(--color-card-navy-800) 0%, var(--color-card-navy-900) 100%);
-  }
-
-  /* 장식 한 겹 — 흐린 태극기(태극 + 건곤감리) 워터마크. 그림 자체는 me/_portal/card-art.ts 의
-     SVG 한 장(PNG 렌더러와 공유)이고, 여기서는 정보 요소 아래 겹에 꽉 채우기만 한다 */
-  [data-id-card-art] {
-    overflow: hidden;
+    /* 바탕: 대표 디자인 그림에서 가변 요소만 지운 플레이트(1579×996, 카드와 같은 비율).
+       제목·엠블럼·라벨·알약 테·QR 금테·하단 안내문이 전부 이 그림 안에 있다(me/_portal/card-art.ts).
+       색은 그림이 뜨기 전의 크림 바탕 */
+    background: #f6f1ea url("/brand/card-plate.jpg") center / cover no-repeat;
   }
 }
 
@@ -355,12 +347,12 @@
     /* 오려낼 선. 표 테두리 규칙(#999)보다 진하게 둔다 */
     border: 0.3mm solid #000 !important;
     box-shadow: none !important;
-    /* 실물 카드처럼 보이게 남색 바탕을 그대로 찍는다 — "흰 바탕·검정 글씨" 인쇄 원칙의
+    /* 실물 카드처럼 보이게 바탕 그림을 그대로 찍는다 — "흰 바탕·검정 글씨" 인쇄 원칙의
        유일한 예외(대표 결정). body 의 color:#000 강제는 카드 범위에서 되돌린다 */
-    color: #fff !important;
+    color: var(--color-card-ink) !important;
   }
 
-  /* 바탕·홍청 띠·인장·금색·흰 글씨·QR·사진 전부 원본 색으로. 브라우저의 "배경 그래픽" 설정과 무관하게 */
+  /* 바탕 그림(background-image)·알약 흰 글씨·QR·사진 전부 원본 색으로. 브라우저의 "배경 그래픽" 설정과 무관하게 */
   [data-id-card],
   [data-id-card] * {
     -webkit-print-color-adjust: exact;

@@ -5,9 +5,8 @@ import { ImageResponse } from "next/og";
 
 import { buildQrPath } from "@/components/ui/QrCode";
 import { formatPeriodDate, type MembershipPeriod } from "@/lib/domain/membershipPeriod";
-import { ORG_NAME } from "@/lib/site";
 
-import { CARD_COLORS, CARD_ORG_NAME_EN, cardWatermarkSvg, svgToDataUrl } from "../../_portal/card-art";
+import { CARD_COLORS, CARD_LAYOUT, photoPlaceholderSvg, svgToDataUrl } from "../../_portal/card-art";
 
 /**
  * 디지털 회원증 PNG 렌더러 (P3 — "이미지로 저장").
@@ -19,20 +18,18 @@ import { CARD_COLORS, CARD_ORG_NAME_EN, cardWatermarkSvg, svgToDataUrl } from ".
  *  next/og(satori + resvg)는 Next 에 내장돼 있어 새 패키지가 없다.
  *
  * ── 화면(MemberIdCard.tsx)과 같은 모습이어야 한다 ───────────────────────
- *  화면 카드는 글자·사진·QR 이 전부 em 이고, em = 카드 폭 / 34.24 (globals.css).
+ *  화면 카드는 가변 요소가 전부 em 이고, em = 카드 폭 / 34.24 (globals.css).
  *  여기서는 카드 폭 1712px(실물 85.6mm 의 2x) → 1em = 50px 로 **같은 비율**을 px 로 환산해
- *  그린다. 색은 card-art.ts 의 CARD_COLORS(= globals.css 의 card-navy/taegeuk 토큰)와
- *  accent-200/300 값 그대로다.
+ *  그린다. 자리는 card-art.ts 의 CARD_LAYOUT(정본)을 그대로 쓰고, 색은 CARD_COLORS
+ *  (= globals.css 의 card-ink 토큰) 그대로다.
  *  satori 는 Tailwind 를 모르고 flex 기반 CSS 서브셋만 알아듣기 때문에 인라인 스타일로
- *  다시 그렸다 — 레이아웃을 바꿀 때는 **MemberIdCard.tsx 와 이 파일을 같이** 고쳐야 한다.
+ *  그렸다 — 레이아웃을 바꿀 때는 **MemberIdCard.tsx 와 이 파일을 같이** 고쳐야 한다.
  *
- * ── 엠블럼·워터마크 ─────────────────────────────────────────────────────
- *  머리의 공식 엠블럼은 public/brand/logo-emblem.svg(둘레 글자까지 path 로 그린 벡터)를
- *  fs 로 읽어 데이터 URL <img> 로 넣는다. satori 는 <textPath> 를 모르지만 path 만 있는
- *  SVG 는 resvg 가 벡터 그대로 래스터화하므로 1712px 카드에서도 글자가 선명하다 —
- *  sharp 로 미리 PNG 를 만들 필요가 없고(의존성 추가 없음), 화면과 같은 파일을 쓴다.
- *  바탕 워터마크(흐린 태극기)는 card-art.ts 의 문자열을 화면과 그대로 공유한다 —
- *  rect·path·transform 만 쓴 SVG 라 resvg 가 브라우저와 같게 그린다.
+ * ── 배경 플레이트 ───────────────────────────────────────────────────────
+ *  대표 디자인에서 가변 요소만 지운 그림(public/brand/card-plate.jpg, 1579×996)을 fs 로 읽어
+ *  데이터 URL <img> 로 바닥에 깐다. 1712×1080 으로 8% 키워 깔린다(비율이 같아 잘리지 않는다).
+ *  화면은 같은 파일을 CSS background 로 쓴다. 제목·엠블럼·라벨·알약 테·QR 금테·안내문은
+ *  전부 그 그림 안에 있어서 여기서 그리지 않는다.
  *
  * ── 한글 폰트 ────────────────────────────────────────────────────────────
  *  satori 에는 CJK 폰트가 없다 → 폰트 버퍼를 넘겨야 한다. 운영 서버(Vercel, 리눅스)에는
@@ -53,14 +50,6 @@ export const CARD_IMAGE_SIZE = { width: 1712, height: 1080 } as const;
 
 /** globals.css `font-size: calc(100cqw / 34.24)` 와 같은 비율 → 1712px 카드에서 1em = 50px */
 const EM = CARD_IMAGE_SIZE.width / 34.24;
-
-/** globals.css 의 토큰 값. 바꿀 때 양쪽을 같이 바꾼다(남색·홍청은 card-art.ts 가 정본). */
-const COLOR = {
-  ...CARD_COLORS,
-  accent200: "#efc98d",
-  accent300: "#e3a951",
-  white: "#ffffff",
-} as const;
 
 const FONT_FAMILY = "Noto Sans KR";
 
@@ -129,25 +118,25 @@ export async function fetchPhotoAsDataUrl(photoViewUrl: string): Promise<string>
   }
 }
 
-/* ───────────────────────── 엠블럼 ───────────────────────── */
+/* ───────────────────────── 배경 플레이트 ───────────────────────── */
 
-let emblemPromise: Promise<string> | null = null;
+let platePromise: Promise<string> | null = null;
 
 /**
- * 공식 엠블럼(public/brand/logo-emblem.svg)을 데이터 URL 로. 화면 <img src="/brand/…"> 와
+ * 배경 플레이트(public/brand/card-plate.jpg)를 데이터 URL 로. 화면의 CSS background 와
  * 같은 파일이다. 폰트와 같은 이유로 경로를 리터럴로 적는다(next.config 의
- * outputFileTracingIncludes 에도 올라 있다). 프로세스에 한 번만 읽는다.
+ * outputFileTracingIncludes 에도 올라 있다). 프로세스에 한 번만 읽는다(약 280KB).
  */
-function loadEmblemDataUrl(): Promise<string> {
-  if (!emblemPromise) {
-    emblemPromise = readFile(join(process.cwd(), "public/brand/logo-emblem.svg"))
-      .then((svg) => `data:image/svg+xml;base64,${svg.toString("base64")}`)
+function loadPlateDataUrl(): Promise<string> {
+  if (!platePromise) {
+    platePromise = readFile(join(process.cwd(), "public/brand/card-plate.jpg"))
+      .then((jpg) => `data:image/jpeg;base64,${jpg.toString("base64")}`)
       .catch((e: unknown) => {
-        emblemPromise = null;
+        platePromise = null;
         throw e;
       });
   }
-  return emblemPromise;
+  return platePromise;
 }
 
 /* ───────────────────────── SVG 조각 ───────────────────────── */
@@ -167,13 +156,13 @@ function qrDataUrl(value: string, px: number): string {
 
 export type MemberCardImageInput = {
   name: string;
-  /** 성명_영문(대문자). "" 이면 영문 줄을 그리지 않는다 — 한글 이름 위치는 그대로 */
+  /** 성명_영문(대문자). "" 이면 영문을 그리지 않는다 — 한글 이름 위치는 그대로 */
   nameEn: string;
   memberNo: string;
   memberType: string;
   /** 오늘 유효한 회원 기간 — verdict.period. 화면 카드와 같은 값 */
   period: MembershipPeriod;
-  /** fetchPhotoAsDataUrl 결과. "" 이면 "사진 없음" 플레이스홀더 */
+  /** fetchPhotoAsDataUrl 결과. "" 이면 실루엣 플레이스홀더 */
   photoDataUrl: string;
   /** QR 이 가리킬 절대 주소 — /verify/<난수토큰> */
   verifyUrl: string;
@@ -182,35 +171,24 @@ export type MemberCardImageInput = {
 /** 화면 컴포넌트의 em 값을 px 로. 소수 둘째 자리까지 — satori 는 소수 px 를 받는다. */
 const px = (em: number): number => Math.round(em * EM * 100) / 100;
 
-/** 흐린 흰색 — Tailwind text-white/60 등과 같은 값 */
-const white = (alpha: number): string => `rgba(255,255,255,${alpha})`;
-
-/** 작은 안내 라벨(성명 · NAME 등) 공통 스타일 — 화면의 text-[0.62em] font-semibold tracking-[0.08em] text-white/60 */
-const labelStyle = {
-  fontSize: px(0.62),
-  fontWeight: 700,
-  letterSpacing: px(0.62 * 0.08),
-  color: white(0.6),
-  lineHeight: 1,
-} as const;
-
 /** 한 줄 말줄임 — 화면의 truncate */
 const truncate = { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } as const;
 
 /** PNG 를 담은 Response(스트림). 호출자가 arrayBuffer() 로 끝까지 받아야 렌더 오류가 드러난다. */
 export async function renderMemberCardImage(input: MemberCardImageInput): Promise<ImageResponse> {
-  const [fonts, emblemDataUrl] = await Promise.all([loadFonts(), loadEmblemDataUrl()]);
+  const [fonts, plateDataUrl] = await Promise.all([loadFonts(), loadPlateDataUrl()]);
   const { width, height } = CARD_IMAGE_SIZE;
+  const L = CARD_LAYOUT;
 
-  // 머리 엠블럼(지름 4.3em + 금색 링 0.14em)·사진·QR — MemberIdCard.tsx 의 em 값과 같다
-  const emblemPx = px(4.3);
-  const emblemRing = px(0.14);
-  const photoW = px(7.95);
-  const photoH = px(10.6);
-  const qrPx = px(8.6);
-
-  // 꼬리 글: 자기 글자 크기(0.68em)가 기준인 여백들
-  const footFont = px(0.68);
+  const photoBox = {
+    position: "absolute",
+    left: px(L.photo.left),
+    top: px(L.photo.top),
+    width: px(L.photo.width),
+    height: px(L.photo.height),
+    borderRadius: px(L.photo.radius),
+  } as const;
+  const qrPx = px(L.qr.size);
 
   return new ImageResponse(
     (
@@ -218,254 +196,166 @@ export async function renderMemberCardImage(input: MemberCardImageInput): Promis
         style={{
           position: "relative",
           display: "flex",
-          flexDirection: "column",
           width,
           height,
-          padding: `${px(0.9)}px ${px(1.2)}px ${px(0.8)}px`,
-          borderRadius: px(1.2),
+          borderRadius: px(L.radius),
           overflow: "hidden",
-          backgroundColor: COLOR.navy800,
-          backgroundImage: `linear-gradient(135deg, ${COLOR.navy800} 0%, ${COLOR.navy900} 100%)`,
-          color: COLOR.white,
+          backgroundColor: "#f6f1ea",
+          color: CARD_COLORS.ink,
           fontFamily: FONT_FAMILY,
           fontSize: EM,
         }}
       >
-        {/* ── 바탕 장식: 흐린 태극기 워터마크 (정보 요소 아래 한 겹) — 화면과 같은 SVG 문자열 ── */}
+        {/* ── 바탕: 플레이트 그림 (화면의 CSS background 와 같은 파일) ── */}
         <img
-          src={svgToDataUrl(cardWatermarkSvg())}
+          src={plateDataUrl}
           width={width}
           height={height}
           alt=""
-          style={{ position: "absolute", left: 0, top: 0, width, height }}
+          style={{ position: "absolute", left: 0, top: 0, width, height, objectFit: "cover" }}
         />
 
-        {/* ── 머리: 엠블럼 + 워드마크 | 카드 종류 ── */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: px(0.8),
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: px(0.7), minWidth: 0, flexShrink: 1 }}>
-            {/* 흰 엠블럼 원판 + 금색 링. 화면의 rounded-full border-accent-300 bg-white shadow 와 같다 */}
-            <div
-              style={{
-                display: "flex",
-                flexShrink: 0,
-                borderRadius: "50%",
-                border: `${emblemRing}px solid ${COLOR.accent300}`,
-                backgroundColor: COLOR.white,
-                boxShadow: `0 ${px(0.3)}px ${px(0.9)}px rgba(0,0,0,0.35)`,
-              }}
-            >
-              <img
-                src={emblemDataUrl}
-                width={emblemPx}
-                height={emblemPx}
-                alt=""
-                style={{ width: emblemPx, height: emblemPx, borderRadius: "50%" }}
-              />
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-              {/* 한글 단체명이 주인공 — 화면의 text-[1.45em] font-bold tracking-[0.04em] */}
-              <div
-                style={{
-                  fontSize: px(1.45),
-                  fontWeight: 700,
-                  letterSpacing: px(1.45 * 0.04),
-                  lineHeight: 1,
-                  ...truncate,
-                }}
-              >
-                {ORG_NAME}
-              </div>
-              <div
-                style={{
-                  marginTop: px(0.5 * 0.4),
-                  fontSize: px(0.5),
-                  fontWeight: 700,
-                  letterSpacing: px(0.5 * 0.12),
-                  color: white(0.65),
-                  lineHeight: 1,
-                  ...truncate,
-                }}
-              >
-                {CARD_ORG_NAME_EN.toUpperCase()}
-              </div>
-            </div>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", flexShrink: 0 }}>
-            <div style={{ fontSize: px(0.85), fontWeight: 700, lineHeight: 1 }}>회원증</div>
-            <div
-              style={{
-                marginTop: px(0.55 * 0.35),
-                fontSize: px(0.55),
-                fontWeight: 700,
-                letterSpacing: px(0.55 * 0.18),
-                color: COLOR.accent300,
-                lineHeight: 1,
-              }}
-            >
-              MEMBERSHIP CARD
-            </div>
-          </div>
-        </div>
-
-        {/* 금색 머리선 */}
-        <div
-          style={{
-            marginTop: px(0.55),
-            height: px(0.1),
-            backgroundImage: `linear-gradient(90deg, ${COLOR.accent300} 0%, rgba(227,169,81,0.7) 50%, rgba(227,169,81,0) 100%)`,
-          }}
-        />
-
-        {/* ── 몸통 ── */}
-        <div style={{ display: "flex", alignItems: "center", gap: px(1), paddingTop: px(0.65), flexGrow: 1 }}>
-          {input.photoDataUrl ? (
+        {/* ── 사진 (플레이트의 금테 안) ── */}
+        {input.photoDataUrl ? (
+          <img
+            src={input.photoDataUrl}
+            width={photoBox.width}
+            height={photoBox.height}
+            alt=""
+            style={{ ...photoBox, objectFit: "cover" }}
+          />
+        ) : (
+          <div
+            style={{
+              ...photoBox,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "flex-end",
+              overflow: "hidden",
+            }}
+          >
             <img
-              src={input.photoDataUrl}
-              width={photoW}
-              height={photoH}
+              src={svgToDataUrl(photoPlaceholderSvg())}
+              width={photoBox.width}
+              height={photoBox.height}
               alt=""
-              style={{
-                width: photoW,
-                height: photoH,
-                flexShrink: 0,
-                borderRadius: px(0.55),
-                border: `${px(0.14)}px solid ${COLOR.accent300}`,
-                objectFit: "cover",
-              }}
+              style={{ position: "absolute", left: 0, top: 0, width: photoBox.width, height: photoBox.height }}
             />
-          ) : (
             <div
               style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: photoW,
-                height: photoH,
-                flexShrink: 0,
-                borderRadius: px(0.55),
-                border: `${px(0.12)}px dashed rgba(255,255,255,0.35)`,
-                backgroundColor: "rgba(255,255,255,0.05)",
-                fontSize: px(0.8),
-                color: white(0.6),
+                marginBottom: px(0.7 * 0.6),
+                fontSize: px(0.7),
+                fontWeight: 700,
+                lineHeight: 1,
+                color: "rgba(11,29,71,0.55)",
               }}
             >
               사진 없음
             </div>
-          )}
-
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "space-between",
-              alignSelf: "stretch",
-              flexGrow: 1,
-              flexShrink: 1,
-              minWidth: 0,
-              padding: `${px(0.2)}px 0`,
-            }}
-          >
-            <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-              <div style={labelStyle}>성명 · NAME</div>
-              <div
-                style={{
-                  marginTop: px(2.1 * 0.25),
-                  fontSize: px(2.1),
-                  fontWeight: 700,
-                  letterSpacing: -px(2.1 * 0.02),
-                  lineHeight: 1.15,
-                  ...truncate,
-                }}
-              >
-                {input.name}
-              </div>
-              {/* 영문 이름(선택) — 화면의 mt-[0.2em] text-[0.72em] font-semibold tracking-[0.08em] text-white/80.
-                  비어 있으면 그리지 않는다. 이 블록은 위 정렬(space-between 의 첫 자식)이라 한글 이름 위치는 안 움직인다 */}
-              {input.nameEn ? (
-                <div
-                  style={{
-                    marginTop: px(0.72 * 0.2),
-                    fontSize: px(0.72),
-                    fontWeight: 700,
-                    letterSpacing: px(0.72 * 0.08),
-                    lineHeight: 1,
-                    color: white(0.8),
-                    ...truncate,
-                  }}
-                >
-                  {input.nameEn}
-                </div>
-              ) : null}
-            </div>
-
-            {/* 화면의 dl grid-cols-2: 1줄 = 회원번호 | 회원구분, 2줄 = 유효기간(전체 폭) */}
-            <div style={{ display: "flex", flexDirection: "column", gap: px(0.5), lineHeight: 1 }}>
-              <div style={{ display: "flex", gap: px(1) }}>
-                <div style={{ display: "flex", flexDirection: "column", flexGrow: 1, flexBasis: 0, minWidth: 0 }}>
-                  <div style={labelStyle}>회원번호 · NO.</div>
-                  <div
-                    style={{
-                      marginTop: px(1.15 * 0.3),
-                      fontSize: px(1.15),
-                      fontWeight: 700,
-                      letterSpacing: px(1.15 * 0.12),
-                      color: COLOR.accent200,
-                      ...truncate,
-                    }}
-                  >
-                    {input.memberNo}
-                  </div>
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", flexGrow: 1, flexBasis: 0, minWidth: 0 }}>
-                  <div style={labelStyle}>회원구분 · TYPE</div>
-                  <div style={{ marginTop: px(0.3), fontSize: px(1), fontWeight: 700, ...truncate }}>
-                    {input.memberType}
-                  </div>
-                </div>
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-                <div style={labelStyle}>유효기간 · VALID</div>
-                {/* satori: 자식이 둘 이상인 div 는 display:flex 가 있어야 한다 — 기간을 한 문자열로 */}
-                <div style={{ marginTop: px(0.3), fontSize: px(1), fontWeight: 700, ...truncate }}>
-                  {`${formatPeriodDate(input.period.validFrom)} ~ ${formatPeriodDate(input.period.validUntil)}`}
-                </div>
-              </div>
-            </div>
           </div>
+        )}
 
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: px(0.35), flexShrink: 0 }}>
-            {/* QR 은 자체 흰 바탕을 갖지만, 남색 위에서 경계가 또렷하도록 흰 상자에 한 번 더 담는다 */}
-            <div style={{ display: "flex", borderRadius: px(0.5), backgroundColor: COLOR.white, padding: px(0.3) }}>
-              <img src={qrDataUrl(input.verifyUrl, qrPx)} width={qrPx} height={qrPx} alt="" />
-            </div>
-            <div style={{ fontSize: px(0.68), fontWeight: 700, color: white(0.75), lineHeight: 1 }}>
-              스캔하면 진위 확인
-            </div>
-          </div>
-        </div>
-
-        {/* ── 꼬리 ── */}
+        {/* ── 이름 (+ 영문, 있을 때만). 아래 정렬이라 영문이 있든 없든 한글 자리는 같다 ── */}
         <div
           style={{
-            marginTop: px(0.6),
-            paddingTop: px(0.4),
-            borderTop: `${footFont * 0.08}px solid rgba(255,255,255,0.15)`,
-            fontSize: footFont,
-            fontWeight: 400,
-            lineHeight: 1.3,
-            color: white(0.65),
+            position: "absolute",
+            left: px(L.name.left),
+            top: px(L.name.top),
+            maxWidth: px(L.name.maxWidth),
+            display: "flex",
+            alignItems: "flex-end",
+            fontSize: px(L.name.fontSize),
+            fontWeight: 700,
+            letterSpacing: px(L.name.fontSize * L.name.tracking),
+            lineHeight: 1,
+            whiteSpace: "nowrap",
           }}
         >
-          {"회비 납부일부터 1년간 유효합니다. " +
-            "진위는 QR 로 확인해 주십시오 — 화면 캡처는 확인 근거가 되지 않습니다."}
+          <div style={{ flexShrink: 0 }}>{input.name}</div>
+          {input.nameEn ? (
+            <div
+              style={{
+                marginLeft: px(L.nameEn.gap),
+                fontSize: px(L.nameEn.fontSize),
+                fontWeight: 700,
+                letterSpacing: px(L.nameEn.fontSize * 0.04),
+                lineHeight: 1,
+                color: "rgba(11,29,71,0.7)",
+                minWidth: 0,
+                ...truncate,
+              }}
+            >
+              {input.nameEn}
+            </div>
+          ) : null}
         </div>
+
+        {/* ── 회원번호 (플레이트의 금테 알약 안) ── */}
+        <div
+          style={{
+            position: "absolute",
+            left: px(L.memberNo.left),
+            top: px(L.memberNo.top),
+            width: px(L.memberNo.width),
+            height: px(L.memberNo.height),
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: px(L.memberNo.fontSize),
+            fontWeight: 700,
+            letterSpacing: px(L.memberNo.fontSize * L.memberNo.tracking),
+            lineHeight: 1,
+            whiteSpace: "nowrap",
+          }}
+        >
+          {input.memberNo}
+        </div>
+
+        {/* ── 회원구분 (플레이트의 남색 알약 안, 흰 글자) ── */}
+        <div
+          style={{
+            position: "absolute",
+            left: px(L.memberType.left),
+            top: px(L.memberType.top),
+            width: px(L.memberType.width),
+            height: px(L.memberType.height),
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: px(L.memberType.fontSize),
+            fontWeight: 700,
+            lineHeight: 1,
+            color: CARD_COLORS.white,
+            whiteSpace: "nowrap",
+          }}
+        >
+          {input.memberType}
+        </div>
+
+        {/* ── 유효기간 — satori: 자식이 둘 이상인 div 는 display:flex 가 있어야 한다 → 한 문자열로 ── */}
+        <div
+          style={{
+            position: "absolute",
+            left: px(L.period.left),
+            top: px(L.period.top),
+            fontSize: px(L.period.fontSize),
+            fontWeight: 700,
+            lineHeight: 1,
+            whiteSpace: "nowrap",
+          }}
+        >
+          {`${formatPeriodDate(input.period.validFrom)} ~ ${formatPeriodDate(input.period.validUntil)}`}
+        </div>
+
+        {/* ── QR (플레이트의 금테 흰 상자 안). 자체 흰 여백(quiet zone)을 갖는다 ── */}
+        <img
+          src={qrDataUrl(input.verifyUrl, qrPx)}
+          width={qrPx}
+          height={qrPx}
+          alt=""
+          style={{ position: "absolute", left: px(L.qr.left), top: px(L.qr.top), width: qrPx, height: qrPx }}
+        />
       </div>
     ),
     { width, height, fonts },
