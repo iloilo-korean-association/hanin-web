@@ -42,6 +42,9 @@ export const EMERGENCY_NUMBER = "911";
  *   회원(매직링크)    /me/[token]
  *   회원(세션쿠키)    /me, /me/password, /me/card, /me/card/image(PNG)
  *                                                   ← P1 비밀번호 로그인 · P3 회원증
+ *   회원(세션 또는 ?token=)  /me/name-en  ← 영문 이름 등록 관문. 비어 있으면 /me·/me/[token] 이
+ *                                           이리로 보낸다(임시 비밀번호 → 영문 이름 → 포털 순서).
+ *                                           회원증(/me/card*)·/verify 는 막지 않는다
  *   임원(세션쿠키)    /officer, /officer/login, /officer/receipt,
  *                     /officer/expense, /officer/approve, /officer/audit,
  *                     /officer/members, /officer/members/photos,
@@ -65,6 +68,8 @@ export const ROUTES = {
   /** 세션 기반 회원 홈. 매직링크 화면(/me/[token])과 같은 내용을 그린다. */
   meHome: "/me",
   mePassword: "/me/password",
+  /** 영문 이름 등록 관문. 세션 또는 ?token=(매직링크) — domain/portalGate.ts 가 순서를 정한다 */
+  meNameEn: "/me/name-en",
   /** 디지털 회원증 (P3). 인쇄용 단독 화면 */
   meCard: "/me/card",
   /** 회원증 PNG (P3 "이미지로 저장"). /me/card 와 같은 가드(세션 또는 ?token=) */

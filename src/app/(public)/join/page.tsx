@@ -13,14 +13,14 @@ import { JoinForm } from "./JoinForm";
 export const metadata: Metadata = {
   title: "회원 가입",
   description:
-    "일로일로 한인회 회원 가입 신청. 이름·연락처·이메일·비밀번호 4가지만 적으시면 됩니다. 여권번호·ACR I-Card·주민등록번호는 수집하지 않습니다.",
+    "일로일로 한인회 회원 가입 신청. 이름·영문 이름·연락처·이메일·비밀번호 5가지만 적으시면 됩니다. 여권번호·ACR I-Card·주민등록번호는 수집하지 않습니다.",
   alternates: { canonical: ROUTES.join },
   openGraph: {
     type: "website",
     locale: "ko_KR",
     siteName: ORG_NAME,
     title: `회원 가입 · ${ORG_NAME}`,
-    description: "이름·연락처·이메일·비밀번호 4가지면 끝납니다. 회원번호와 본인 전용 조회 링크를 바로 받으실 수 있습니다.",
+    description: "이름·영문 이름·연락처·이메일·비밀번호 5가지면 끝납니다. 회원번호와 본인 전용 조회 링크를 바로 받으실 수 있습니다.",
     url: ROUTES.join,
     // ★ 페이지에서 openGraph 를 정의하면 루트의 og:image 가 통째로 사라진다.
     //   images 를 빼면 카톡에 링크를 붙여도 썸네일 카드가 뜨지 않는다(curl 로 확인).
@@ -71,8 +71,8 @@ export default async function JoinPage() {
         description={
           // 회원 구분을 고르지 않는 대신 한 줄로 알린다. 금액은 설정값(회비단가.정회원).
           regularFee !== null
-            ? `이름·연락처·이메일·비밀번호 4가지만 적으시면 됩니다. 가입하시면 정회원(연회비 ${formatPeso(regularFee)})으로 등록됩니다. 학생·사업회원 등은 총무에게 말씀해 주십시오.`
-            : "이름·연락처·이메일·비밀번호 4가지만 적으시면 됩니다. 가입하시면 정회원으로 등록됩니다. 학생·사업회원 등은 총무에게 말씀해 주십시오."
+            ? `이름·영문 이름·연락처·이메일·비밀번호 5가지만 적으시면 됩니다. 가입하시면 정회원(연회비 ${formatPeso(regularFee)})으로 등록됩니다. 학생·사업회원 등은 총무에게 말씀해 주십시오.`
+            : "이름·영문 이름·연락처·이메일·비밀번호 5가지만 적으시면 됩니다. 가입하시면 정회원으로 등록됩니다. 학생·사업회원 등은 총무에게 말씀해 주십시오."
         }
         breadcrumb={[{ href: ROUTES.home, label: "홈" }]}
       />

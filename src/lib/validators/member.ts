@@ -9,14 +9,78 @@ import { zDuesGrade, zGender, zHouseholdRole, zMemberStatus, zMemberType } from 
  *   "나중에 필요할지 모르니 받아 두자" 가 개인정보 사고의 시작이다.
  */
 
+/* ── 영문 이름 (성명_영문, 2026-11-01 필수화) ──────────────────────────── */
+
+export const NAME_EN_MAX = 60;
+
+/**
+ * 영문 이름 정규화 — trim → 연속 공백 1개 → **대문자**.
+ * 여권 영문 표기 관례(대문자)에 맞춘다. 회원이 소문자로 쳐도 저장은 대문자다.
+ * 가입·관문(/me/name-en)·임원 수정이 모두 이 함수를 거친 값을 저장·비교한다.
+ */
+export function normalizeNameEn(raw: string): string {
+  return String(raw ?? "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toUpperCase();
+}
+
+/** 한글 음절·자모가 하나라도 섞여 있나 (오류 문장을 "영문자만" 으로 고르기 위해 따로 본다). */
+const HANGUL_RE = /[ᄀ-ᇿ㄰-㆏가-힯]/;
+/** 허용 문자: 영문자·공백·하이픈·어포스트로피·마침표. 첫 글자는 영문자. (정규화 뒤라 대문자만 본다) */
+const NAME_EN_RE = /^[A-Z][A-Z .'-]*$/;
+
+/**
+ * 정규화된 영문 이름의 문제점. 없으면 null.
+ * 빈 값도 문제로 본다 — 빈 값을 허용하는 쪽(임원 수정)은 호출 전에 가른다.
+ */
+export function nameEnProblem(normalized: string): string | null {
+  if (normalized === "") return "영문 이름을 적어 주십시오.";
+  if (HANGUL_RE.test(normalized)) return "영문자만 적어 주십시오. 예: HONG GILDONG";
+  if (normalized.length < 2) return "영문 이름은 2자 이상 적어 주십시오.";
+  if (normalized.length > NAME_EN_MAX) return `영문 이름은 ${NAME_EN_MAX}자 이내로 적어 주십시오.`;
+  if (!NAME_EN_RE.test(normalized)) {
+    return "영문 이름은 영문자·공백·하이픈(-)·어포스트로피(')·마침표(.)만 쓸 수 있고, 첫 글자는 영문자여야 합니다. 예: HONG GILDONG";
+  }
+  return null;
+}
+
+/**
+ * 영문 이름 — **필수**. 가입(/join)과 기존 회원 관문(/me/name-en)이 쓴다.
+ * 출력은 항상 정규화된 대문자다.
+ */
+export const zNameEn = z
+  .string()
+  .transform(normalizeNameEn)
+  .superRefine((s, ctx) => {
+    const problem = nameEnProblem(s);
+    if (problem) ctx.addIssue({ code: "custom", message: problem });
+  });
+
+/**
+ * 영문 이름 — **빈 값 허용**. 임원 수정(memberUpdateSchema)이 쓴다.
+ * 운영 DB 기존 회원 49명이 전원 비어 있어(2026-11-01), 필수로 두면 다른 칸 하나 고치는 저장도 막힌다.
+ * 적으면 zNameEn 과 같은 규칙.
+ */
+export const zNameEnOrEmpty = z
+  .string()
+  .transform(normalizeNameEn)
+  .superRefine((s, ctx) => {
+    if (s === "") return;
+    const problem = nameEnProblem(s);
+    if (problem) ctx.addIssue({ code: "custom", message: problem });
+  });
+
 /**
  * 공개 가입 폼 (/join). 임원이 아니라 본인이 낸다.
- * 폼이 받는 것은 성명·연락처·이메일(+비밀번호·개인정보 동의)뿐이다(2026-10-22).
+ * 폼이 받는 것은 성명·영문 이름·연락처·이메일(+비밀번호·개인정보 동의)뿐이다
+ * (2026-10-22 4칸, 영문 이름은 2026-11-01 추가 — 대표 결정).
  * 회원구분·회비등급·동의 두 가지는 actions.ts 가 고정값을 넣고, 나머지는 기본값으로 채운다.
  */
 export const joinInputSchema = z.object({
   name: zText(20, "이름"), // 가입 폼 라벨이 '이름' 이다(2026-10-22)
-  nameEn: zOptText(60),
+  /** 여권 영문 표기. 필수. 대문자로 정규화해 저장한다(zNameEn) */
+  nameEn: zNameEn,
   birthYear: z
     .union([z.string(), z.number()])
     .transform((v) => Number(v))
@@ -48,7 +112,7 @@ export type JoinInput = z.infer<typeof joinInputSchema>;
 /**
  * 임원이 회원 정보를 고칠 때 (/officer/members/[회원번호], 2026-10-22).
  *
- * 받는 칸 = 가입 4칸(이름·연락처·이메일 — 비밀번호는 [비밀번호 재설정] 버튼) +
+ * 받는 칸 = 가입 칸(이름·영문 이름·연락처·이메일 — 비밀번호는 [비밀번호 재설정] 버튼) +
  *   가입에서 뺀 칸(출생연도·거주 지역·회비등급·비고·명부공개/알림수신 동의) + 상태.
  * 회원구분은 받지 않는다 — 회비등급을 따라간다(domain/memberEdit.ts memberTypeForGrade).
  * 회원번호·가입일·링크토큰은 읽기 전용이라 칸이 없다.
@@ -57,10 +121,13 @@ export type JoinInput = z.infer<typeof joinInputSchema>;
  *   등록돼 있어서(2026-10-22 운영 DB 49명 중 44명), 가입처럼 필수로 두면 그 회원들의
  *   회비등급 하나 고치는 저장도 막힌다. 적으면 형식은 가입과 같은 규칙으로 본다.
  * ★ 이메일은 zEmail 이 trim·소문자로 바꿔 저장한다(가입·로그인과 같은 형태).
+ * ★ 영문 이름도 **비워도 된다**(zNameEnOrEmpty) — 같은 이유(2026-11-01 운영 49명 전원 빈 값).
+ *   적으면 가입과 같은 규칙으로 대문자 저장.
  */
 export const memberUpdateSchema = z.object({
   memberNo: zMemberNo,
   name: zText(20, "이름"),
+  nameEn: zNameEnOrEmpty,
   phone: z
     .string()
     .trim()

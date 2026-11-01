@@ -56,6 +56,8 @@ import { fdBool, fdStr, toActionError } from "../../../_lib/server-utils";
 
 export type MemberEditValues = {
   name: string;
+  /** 영문 이름. 비워도 된다(기존 회원 전원 빈 값) — 적으면 대문자로 저장 */
+  nameEn: string;
   phone: string;
   email: string;
   birthYear: string;
@@ -98,6 +100,7 @@ function bad(
 const MEMBER_SELECT = {
   memberNo: true,
   name: true,
+  nameEn: true,
   phone: true,
   email: true,
   birthYear: true,
@@ -130,6 +133,7 @@ export async function updateMemberAction(
   // 실패하면 입력값을 그대로 돌려준다(React 가 폼을 비워도 다시 채울 수 있게).
   const values: MemberEditValues = {
     name: fdStr(fd, "name"),
+    nameEn: fdStr(fd, "nameEn"),
     phone: fdStr(fd, "phone"),
     email: fdStr(fd, "email"),
     birthYear: fdStr(fd, "birthYear"),
@@ -173,6 +177,7 @@ export async function updateMemberAction(
         const parsed = memberUpdateSchema.safeParse({
           memberNo,
           name: values.name,
+          nameEn: values.nameEn,
           phone: values.phone,
           email: values.email,
           birthYear: values.birthYear,
@@ -200,6 +205,7 @@ export async function updateMemberAction(
 
         const beforeEditable: MemberEditable = {
           name: before.name,
+          nameEn: before.nameEn,
           phone: before.phone,
           email: before.email,
           birthYear: before.birthYear,
@@ -213,6 +219,7 @@ export async function updateMemberAction(
         };
         const after: MemberEditable = {
           name: input.name,
+          nameEn: input.nameEn, // zNameEnOrEmpty 가 trim·공백 정리·대문자로 만들었다("" 허용)
           phone: input.phone,
           email: input.email, // zEmail 이 trim·소문자로 만들었다
           birthYear: input.birthYear,
@@ -279,6 +286,7 @@ export async function updateMemberAction(
           where: { memberNo },
           data: {
             name: after.name,
+            nameEn: after.nameEn,
             phone: after.phone,
             // 중복검사 키다. 번호를 바꾸면 함께 다시 뽑아야 한다(회원 본인 수정과 같다).
             phoneLast4: phoneLast4(after.phone),

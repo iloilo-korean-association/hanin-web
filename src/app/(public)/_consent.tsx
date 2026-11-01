@@ -10,6 +10,8 @@ import { Alert } from "@/components/ui";
  *   가입 폼이 이름·연락처·이메일·비밀번호 4칸으로 줄어(대표 결정) 출생연도·회원 구분을
  *   더 이상 받지 않는다. 받지 않는 항목을 '필수 수집' 으로 고지해 두면 고지가 사실과 다르다.
  *   거주 지역은 가입 때 받지 않지만 '내 정보' 에서 넣을 수 있어 [선택] 으로 옮겼다.
+ *   2026-11-01 — 영문 성명(여권 영문 표기)을 [필수] 에 더했다. 가입 폼이 받고, 기존 회원도
+ *   포털을 열기 전 관문(/me/name-en)에서 등록한다. 목적 ⑤(긴급 상황 본인 확인)에 쓰인다.
  *
  * 대괄호 자리(`[총무 이메일을 여기에 적으세요]` 등)는 원문이 "여기에 채워 넣으라"고
  * 지시한 **빈칸**이다. 빈칸을 그대로 두면 동의서가 성립하지 않으므로 12_임원 테이블의
@@ -43,7 +45,7 @@ function fullText(c: DpoContact): string {
    ⑤ 영사 협조가 필요한 긴급 상황(사고·재해·수감 등)에서의 본인 확인
 
 2. 수집하는 개인정보 항목
-   [필수] 성명, 휴대전화번호, 이메일 주소
+   [필수] 성명, 영문 성명(여권 영문 표기), 휴대전화번호, 이메일 주소
    [선택] 거주 지역, 명부 공개 동의 여부, 알림 수신 동의 여부
           (가입 후 '내 정보' 화면에서 직접 정하실 수 있습니다)
    [자동 생성] 회원번호, 회원 구분, 가입일시, 동의일시, 조회용 링크토큰
@@ -123,7 +125,8 @@ const ENGLISH_SUMMARY = `【Privacy Notice — Iloilo Korean Association】
 Purpose: membership administration, annual dues collection and receipting,
 event and emergency notifications, and accounting records for audit.
 
-Data collected: name, mobile number and email (required); area of residence
+Data collected: name in Korean and in English (as in your passport), mobile number
+and email (required); area of residence
 and your roster/notification preferences (optional, set later in My Info).
 Membership number and type are assigned by the association.
 We do NOT collect government ID numbers, passport numbers,

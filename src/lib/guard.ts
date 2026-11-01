@@ -304,6 +304,8 @@ export interface MemberContext {
   /** 01_회원.회원번호 — 이 테이블의 PK 다 */
   memberNo: string;
   name: string;
+  /** 성명_영문(여권 표기, 대문자). "" 이면 포털 관문(/me/name-en)이 먼저 받는다 — domain/portalGate.ts */
+  nameEn: string;
   email: string;
   status: string;
   /** 명부공개동의 — false 면 어떤 공개 화면에도 이름이 나가면 안 된다 */
@@ -343,6 +345,7 @@ export async function requireMember(token: string): Promise<MemberContext> {
     select: {
       memberNo: true,
       name: true,
+      nameEn: true,
       email: true,
       status: true,
       rosterConsent: true,
@@ -406,6 +409,7 @@ export async function requireMemberSession(): Promise<MemberContext> {
     select: {
       memberNo: true,
       name: true,
+      nameEn: true,
       email: true,
       status: true,
       rosterConsent: true,

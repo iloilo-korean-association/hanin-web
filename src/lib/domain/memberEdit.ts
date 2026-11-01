@@ -55,6 +55,8 @@ export function nextMemberType(before: { duesGrade: string; memberType: string }
 /** 임원이 고칠 수 있는 01_회원 칸 (+ 등급을 따라가는 회원구분). */
 export type MemberEditable = {
   name: string;
+  /** 성명_영문 — 임원은 빈 값으로도 둘 수 있다(validators zNameEnOrEmpty). 값은 대문자 정규화 뒤 */
+  nameEn: string;
   phone: string;
   email: string;
   birthYear: number | null;
@@ -72,6 +74,7 @@ export type MemberEditField = keyof MemberEditable;
 /** 순서 = 화면·감사로그에 나오는 순서. 라벨은 01_회원 원장 열 이름(회원 본인 수정의 감사로그와 같은 표기). */
 export const MEMBER_EDIT_FIELDS: readonly { field: MemberEditField; label: string; severity: "INFO" | "WARN" }[] = [
   { field: "name", label: "성명", severity: "INFO" },
+  { field: "nameEn", label: "성명_영문", severity: "INFO" },
   { field: "phone", label: "연락처", severity: "INFO" },
   { field: "email", label: "이메일", severity: "INFO" },
   { field: "birthYear", label: "출생연도", severity: "INFO" },

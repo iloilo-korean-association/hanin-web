@@ -259,6 +259,28 @@ function EditFields({
                 </Field>
 
                 <Field
+                  htmlFor="mem-nameEn"
+                  label="영문 이름"
+                  labelEn="Name in English"
+                  hint="여권 영문 표기. 대문자로 저장됩니다. 기존 회원은 비어 있을 수 있고, 비워 둔 채 다른 칸만 저장해도 됩니다."
+                  error={err("nameEn")}
+                >
+                  <Input
+                    id="mem-nameEn"
+                    name="nameEn"
+                    maxLength={60}
+                    autoComplete="off"
+                    autoCapitalize="characters"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    placeholder="HONG GILDONG"
+                    defaultValue={values.nameEn}
+                    invalid={Boolean(err("nameEn"))}
+                    {...fieldAria("mem-nameEn", { hint: true, error: err("nameEn") })}
+                  />
+                </Field>
+
+                <Field
                   htmlFor="mem-birthYear"
                   label="출생연도"
                   hint="4자리. 모르면 비워 두십시오."

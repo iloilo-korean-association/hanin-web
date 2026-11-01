@@ -64,7 +64,7 @@ export function ProfileForm({
       <Card>
         <CardHeader
           title="내 정보 수정"
-          description="연락처와 동의 항목은 직접 고치실 수 있습니다. 성명·회원번호·회비등급 변경은 총무에게 말씀해 주십시오."
+          description="연락처와 동의 항목은 직접 고치실 수 있습니다. 성명(한글·영문)·회원번호·회비등급 변경은 총무에게 말씀해 주십시오."
         />
         <CardBody>
           {state.status === "error" ? (

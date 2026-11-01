@@ -151,6 +151,7 @@ export default async function MemberEditPage({ params }: { params: Promise<{ mem
     select: {
       memberNo: true,
       name: true,
+      nameEn: true,
       phone: true,
       email: true,
       birthYear: true,
@@ -244,6 +245,20 @@ export default async function MemberEditPage({ params }: { params: Promise<{ mem
               <Item label="회원번호">
                 <span className="font-mono">{m.memberNo}</span>
               </Item>
+              <Item label="영문 이름">
+                {m.nameEn ? (
+                  <span className="break-words">{m.nameEn}</span>
+                ) : (
+                  // 비어 있으면 그 회원은 다음 로그인(또는 매직링크) 때 /me/name-en 관문에서 직접 등록한다.
+                  // 배지는 줄바꿈이 안 되므로 짧게 — 긴 설명은 아래 줄에(375px 에서 가로 스크롤이 생겼다).
+                  <>
+                    <Badge tone="warn">미등록</Badge>
+                    <span className="mt-1 block text-sm font-normal text-ink-muted">
+                      회원이 다음 로그인 때 직접 등록합니다
+                    </span>
+                  </>
+                )}
+              </Item>
               <Item label="가입일">
                 <span className="tnum">{m.joinedOn}</span>
               </Item>
@@ -318,6 +333,7 @@ export default async function MemberEditPage({ params }: { params: Promise<{ mem
             memberNo={m.memberNo}
             initial={{
               name: m.name,
+              nameEn: m.nameEn,
               phone: m.phone,
               email: m.email,
               birthYear: m.birthYear === null ? "" : String(m.birthYear),

@@ -41,7 +41,8 @@ import {
 /**
  * /join — 가입 신청 서버 액션.
  *
- * 받는 것은 이름·연락처·이메일·비밀번호 4칸 + 개인정보 동의 체크 1개뿐이다(대표 결정 2026-10-22).
+ * 받는 것은 이름·영문 이름·연락처·이메일·비밀번호 5칸 + 개인정보 동의 체크 1개뿐이다
+ * (대표 결정 2026-10-22 4칸, 영문 이름은 2026-11-01 추가·필수 — 여권 표기, 대문자로 저장).
  *   회원구분·회비등급은 전원 정회원, 명부공개·알림수신 동의는 false 로 시작한다
  *   (회원이 나중에 '내 정보' 화면에서 켠다). 출생연도는 null, 지역·비고는 "".
  *
@@ -65,6 +66,8 @@ const JOIN_GRADE = "정회원";
 export interface JoinOk {
   memberNo: string;
   name: string;
+  /** 저장된 영문 이름(대문자 정규화 뒤) — 완료 화면에서 본인이 확인하게 보여 준다 */
+  nameEn: string;
   linkToken: string;
   /** 본인 전용 조회 링크 (/me/XXXXXXXX) */
   linkPath: string;
@@ -97,7 +100,7 @@ export async function submitJoin(_prev: JoinState, formData: FormData): Promise<
   /* ① 이중 제출 — 같은 신청서를 두 번 받으면 첫 결과를 그대로 돌려준다. */
   const already = await prisma.member.findFirst({
     where: { formResponseId: idempotencyKey(formToken) },
-    select: { memberNo: true, name: true, linkToken: true, email: true, duesGrade: true, notifyConsent: true },
+    select: { memberNo: true, name: true, nameEn: true, linkToken: true, email: true, duesGrade: true, notifyConsent: true },
   });
   if (already) {
     const inv = await prisma.duesInvoice.findFirst({
@@ -108,6 +111,7 @@ export async function submitJoin(_prev: JoinState, formData: FormData): Promise<
       status: "ok",
       memberNo: already.memberNo,
       name: already.name,
+      nameEn: already.nameEn,
       linkToken: already.linkToken,
       linkPath: memberLinkPath(already.linkToken),
       fiscalYear: inv?.fiscalYear ?? fiscalYearOf(todayManila()),
@@ -122,11 +126,12 @@ export async function submitJoin(_prev: JoinState, formData: FormData): Promise<
   }
 
   /* ③ zod 재검증. 개인정보 동의(privacyConsent)는 스키마가 literal(true) 로 강제한다.
-     폼에서 읽는 것은 이름·연락처·이메일·동의뿐이다. 회원구분·동의 두 가지는 여기서 고정값을
+     폼에서 읽는 것은 이름·영문 이름·연락처·이메일·동의뿐이다. 회원구분·동의 두 가지는 여기서 고정값을
      넣는다 — 폼을 직접 POST 해서 '명예' 등급이나 동의 값을 끼워 넣어도 무시된다.
      (notifyConsent 는 스키마·DB 기본값이 true 라서 반드시 false 를 명시해 덮는다) */
   const parsed = joinInputSchema.safeParse({
     name: textOf(formData, "name"),
+    nameEn: textOf(formData, "nameEn"), // 필수 — zNameEn 이 대문자로 정규화한다
     phone: textOf(formData, "phone"),
     email: textOf(formData, "email"),
     memberType: JOIN_GRADE,
@@ -345,6 +350,7 @@ export async function submitJoin(_prev: JoinState, formData: FormData): Promise<
     status: "ok",
     memberNo: created.memberNo,
     name: input.name,
+    nameEn: input.nameEn,
     linkToken: created.linkToken,
     linkPath: memberLinkPath(created.linkToken),
     fiscalYear,

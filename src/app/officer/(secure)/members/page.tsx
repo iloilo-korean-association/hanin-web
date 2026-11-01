@@ -108,6 +108,8 @@ export default async function MembersPage({ searchParams }: { searchParams: SP }
       ? {
           OR: [
             { name: { contains: q } },
+            // 영문 이름은 대문자로 저장된다(zNameEn) — 검색어도 올려서 본다
+            { nameEn: { contains: q.toUpperCase() } },
             { memberNo: { contains: q.toUpperCase() } },
             { phone: { contains: q } },
           ],
@@ -196,7 +198,7 @@ export default async function MembersPage({ searchParams }: { searchParams: SP }
               action={`${ROUTES.officer}/members`}
               className="flex flex-col gap-3 sm:flex-row sm:items-end"
             >
-              <Field htmlFor="q" label="이름 · 회원번호 · 연락처" className="sm:flex-1">
+              <Field htmlFor="q" label="이름 · 영문 이름 · 회원번호 · 연락처" className="sm:flex-1">
                 <Input
                   id="q"
                   name="q"
