@@ -7,7 +7,7 @@ import { buildQrPath } from "@/components/ui/QrCode";
 import { formatPeriodDate, type MembershipPeriod } from "@/lib/domain/membershipPeriod";
 import { ORG_NAME } from "@/lib/site";
 
-import { CARD_ORG_NAME_EN, cardWatermarkSvg, svgToDataUrl } from "../../_portal/card-art";
+import { CARD_COLORS, CARD_ORG_NAME_EN, cardWatermarkSvg, svgToDataUrl } from "../../_portal/card-art";
 
 /**
  * 디지털 회원증 PNG 렌더러 (P3 — "이미지로 저장").
@@ -21,7 +21,8 @@ import { CARD_ORG_NAME_EN, cardWatermarkSvg, svgToDataUrl } from "../../_portal/
  * ── 화면(MemberIdCard.tsx)과 같은 모습이어야 한다 ───────────────────────
  *  화면 카드는 글자·사진·QR 이 전부 em 이고, em = 카드 폭 / 34.24 (globals.css).
  *  여기서는 카드 폭 1712px(실물 85.6mm 의 2x) → 1em = 50px 로 **같은 비율**을 px 로 환산해
- *  그린다. 색은 globals.css 의 브랜드 토큰 값 그대로다(brand-800/900, accent-200/300).
+ *  그린다. 색은 card-art.ts 의 CARD_COLORS(= globals.css 의 card-navy/taegeuk 토큰)와
+ *  accent-200/300 값 그대로다.
  *  satori 는 Tailwind 를 모르고 flex 기반 CSS 서브셋만 알아듣기 때문에 인라인 스타일로
  *  다시 그렸다 — 레이아웃을 바꿀 때는 **MemberIdCard.tsx 와 이 파일을 같이** 고쳐야 한다.
  *
@@ -30,7 +31,8 @@ import { CARD_ORG_NAME_EN, cardWatermarkSvg, svgToDataUrl } from "../../_portal/
  *  fs 로 읽어 데이터 URL <img> 로 넣는다. satori 는 <textPath> 를 모르지만 path 만 있는
  *  SVG 는 resvg 가 벡터 그대로 래스터화하므로 1712px 카드에서도 글자가 선명하다 —
  *  sharp 로 미리 PNG 를 만들 필요가 없고(의존성 추가 없음), 화면과 같은 파일을 쓴다.
- *  바탕 워터마크는 card-art.ts 의 문자열을 화면과 그대로 공유한다.
+ *  바탕 워터마크(흐린 태극기)는 card-art.ts 의 문자열을 화면과 그대로 공유한다 —
+ *  rect·path·transform 만 쓴 SVG 라 resvg 가 브라우저와 같게 그린다.
  *
  * ── 한글 폰트 ────────────────────────────────────────────────────────────
  *  satori 에는 CJK 폰트가 없다 → 폰트 버퍼를 넘겨야 한다. 운영 서버(Vercel, 리눅스)에는
@@ -52,10 +54,9 @@ export const CARD_IMAGE_SIZE = { width: 1712, height: 1080 } as const;
 /** globals.css `font-size: calc(100cqw / 34.24)` 와 같은 비율 → 1712px 카드에서 1em = 50px */
 const EM = CARD_IMAGE_SIZE.width / 34.24;
 
-/** globals.css 의 토큰 값. 바꿀 때 양쪽을 같이 바꾼다. */
+/** globals.css 의 토큰 값. 바꿀 때 양쪽을 같이 바꾼다(남색·홍청은 card-art.ts 가 정본). */
 const COLOR = {
-  brand800: "#17375d",
-  brand900: "#142d4a",
+  ...CARD_COLORS,
   accent200: "#efc98d",
   accent300: "#e3a951",
   white: "#ffffff",
@@ -221,14 +222,14 @@ export async function renderMemberCardImage(input: MemberCardImageInput): Promis
           padding: `${px(0.9)}px ${px(1.2)}px ${px(0.8)}px`,
           borderRadius: px(1.2),
           overflow: "hidden",
-          backgroundColor: COLOR.brand800,
-          backgroundImage: `linear-gradient(135deg, ${COLOR.brand800} 0%, ${COLOR.brand900} 100%)`,
+          backgroundColor: COLOR.navy800,
+          backgroundImage: `linear-gradient(135deg, ${COLOR.navy800} 0%, ${COLOR.navy900} 100%)`,
           color: COLOR.white,
           fontFamily: FONT_FAMILY,
           fontSize: EM,
         }}
       >
-        {/* ── 바탕 장식: 태극 워터마크 (정보 요소 아래 한 겹) — 화면과 같은 SVG 문자열 ── */}
+        {/* ── 바탕 장식: 흐린 태극기 워터마크 (정보 요소 아래 한 겹) — 화면과 같은 SVG 문자열 ── */}
         <img
           src={svgToDataUrl(cardWatermarkSvg())}
           width={width}
@@ -267,11 +268,12 @@ export async function renderMemberCardImage(input: MemberCardImageInput): Promis
               />
             </div>
             <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+              {/* 한글 단체명이 주인공 — 화면의 text-[1.45em] font-bold tracking-[0.04em] */}
               <div
                 style={{
-                  fontSize: px(1.2),
+                  fontSize: px(1.45),
                   fontWeight: 700,
-                  letterSpacing: -px(1.2 * 0.01),
+                  letterSpacing: px(1.45 * 0.04),
                   lineHeight: 1,
                   ...truncate,
                 }}
@@ -280,11 +282,11 @@ export async function renderMemberCardImage(input: MemberCardImageInput): Promis
               </div>
               <div
                 style={{
-                  marginTop: px(0.5 * 0.35),
+                  marginTop: px(0.5 * 0.4),
                   fontSize: px(0.5),
                   fontWeight: 700,
                   letterSpacing: px(0.5 * 0.12),
-                  color: white(0.7),
+                  color: white(0.65),
                   lineHeight: 1,
                   ...truncate,
                 }}
@@ -403,14 +405,14 @@ export async function renderMemberCardImage(input: MemberCardImageInput): Promis
                   </div>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", flexGrow: 1, flexBasis: 0, minWidth: 0 }}>
-                  <div style={labelStyle}>회원구분</div>
+                  <div style={labelStyle}>회원구분 · TYPE</div>
                   <div style={{ marginTop: px(0.3), fontSize: px(1), fontWeight: 700, ...truncate }}>
                     {input.memberType}
                   </div>
                 </div>
               </div>
               <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-                <div style={labelStyle}>유효기간</div>
+                <div style={labelStyle}>유효기간 · VALID</div>
                 {/* satori: 자식이 둘 이상인 div 는 display:flex 가 있어야 한다 — 기간을 한 문자열로 */}
                 <div style={{ marginTop: px(0.3), fontSize: px(1), fontWeight: 700, ...truncate }}>
                   {`${formatPeriodDate(input.period.validFrom)} ~ ${formatPeriodDate(input.period.validUntil)}`}

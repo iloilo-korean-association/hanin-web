@@ -22,14 +22,18 @@ import { CARD_ORG_NAME_EN, cardWatermarkSvg, EMBLEM_PUBLIC_PATH, svgToDataUrl } 
  *  바탕·흰 글씨·금색 선을 보존하고, QR 과 사진은 원본 그대로 찍는다.
  *  (브라우저 인쇄 설정의 "배경 그래픽" 을 꺼도 이 속성이 있으면 바탕이 나온다.)
  *
- * ── 엠블럼·장식 ────────────────────────────────────────────────────────
+ * ── 시각 언어: "한국스럽게" (대표 요청 2026-11) ──────────────────────────
+ *  태극기의 어법을 신분증의 격으로 옮겼다 — 기념품이 아니라 주민등록증 쪽이다.
+ *  · 바탕: 쪽빛→먹색 남색(card-navy-800/900). 글자는 흰색, 회원번호·테·영문 표기는 금색.
+ *  · 머리선·"회원증" 표기는 금색 그대로(대표 확인 2026-11-01 — 홍청 띠·붉은 인장은 되돌렸다).
+ *  · 라벨: "회원번호 · NO." 처럼 한글 + 영문 병기(회원구분 · TYPE / 유효기간 · VALID). 스캔 안내는 한글만.
+ *  · 워터마크: 흐린 태극기(기울어진 태극 + 건곤감리, 흰색 2.5~6%) — card-art.ts 의 SVG 한 장이
+ *    `[data-id-card-art]` 한 겹에만 깔린다. 정보 요소 위에 아무것도 덧칠하지 않는다 —
+ *    특히 QR 위에 반투명한 것이 겹치면 스캔이 깨진다.
  *  머리의 엠블럼은 한인회 공식 로고(public/brand/logo-emblem.svg — 글자까지 path 로 그린
  *  벡터)라 어떤 크기에서도 선명하다. 흰 원판이 남색 위에 떠 보이도록 금색 링을 두른다.
- *  바탕 장식(엠블럼의 태극 곡선을 키운 워터마크)은 card-art.ts 의 SVG 한 장이고,
- *  `[data-id-card-art]` 한 겹에만 깔린다. 정보 요소 위에 아무것도 덧칠하지 않는다 —
- *  특히 QR 위에 반투명한 것이 겹치면 스캔이 깨진다.
- *  PNG(card/image/card-image.tsx)는 **같은 파일·같은 문자열**로 그린다. 레이아웃을 바꾸면
- *  그 파일도 같이 고친다.
+ *  PNG(card/image/card-image.tsx)는 **같은 파일·같은 문자열·같은 em 값**으로 그린다.
+ *  레이아웃을 바꾸면 그 파일도 같이 고친다.
  *
  * ── 유효기간 칸 (대표 결정 2026-10-21) ──────────────────────────────────
  *  "유효연도 2026년" 대신 **회비 납부일부터 1년** 인 기간을 `2026.10.15 ~ 2027.10.14` 로 찍는다.
@@ -85,8 +89,9 @@ export function MemberIdCard({
               />
             </div>
             <div className="min-w-0 leading-none">
-              <p className="truncate text-[1.2em] font-bold tracking-[-0.01em]">{ORG_NAME}</p>
-              <p className="mt-[0.35em] truncate text-[0.5em] font-semibold tracking-[0.12em] text-white/70 uppercase">
+              {/* 한글 단체명이 주인공 — 굵게·조금 넓은 자간. 영문은 보조 */}
+              <p className="truncate text-[1.45em] font-bold tracking-[0.04em]">{ORG_NAME}</p>
+              <p className="mt-[0.4em] truncate text-[0.5em] font-semibold tracking-[0.12em] text-white/65 uppercase">
                 {CARD_ORG_NAME_EN}
               </p>
             </div>
@@ -140,11 +145,11 @@ export function MemberIdCard({
                 </dd>
               </div>
               <div className="min-w-0">
-                <dt className="text-[0.62em] font-semibold tracking-[0.08em] text-white/60">회원구분</dt>
+                <dt className="text-[0.62em] font-semibold tracking-[0.08em] text-white/60">회원구분 · TYPE</dt>
                 <dd className="mt-[0.3em] truncate text-[1em] font-semibold">{memberType}</dd>
               </div>
               <div className="col-span-2 min-w-0">
-                <dt className="text-[0.62em] font-semibold tracking-[0.08em] text-white/60">유효기간</dt>
+                <dt className="text-[0.62em] font-semibold tracking-[0.08em] text-white/60">유효기간 · VALID</dt>
                 <dd className="mt-[0.3em] truncate text-[1em] font-semibold">
                   {formatPeriodDate(period.validFrom)} ~ {formatPeriodDate(period.validUntil)}
                 </dd>

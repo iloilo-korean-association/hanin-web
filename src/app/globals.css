@@ -69,6 +69,16 @@
   --color-accent-500: #b0741d;
   --color-accent-600: #8d5b16;
 
+  /* ── 디지털 회원증 전용 ──────────────────────────────────────────────────
+     정본은 me/_portal/card-art.ts 의 CARD_COLORS — PNG 렌더러가 그 상수로 그리므로
+     여기 값과 **항상 같아야** 한다. 다른 화면에서는 쓰지 않는다.
+     card-navy : 쪽빛에 먹을 섞은 남색(brand-800/900 보다 깊다) — 카드 바탕
+     taegeuk   : 태극 홍·청. 머리 띠와 "회원증" 인장에만 */
+  --color-card-navy-800: #10264a;
+  --color-card-navy-900: #0a1730;
+  --color-taegeuk-hong: #c8102e;
+  --color-taegeuk-cheong: #2064c6;
+
   /* ── 글자 색 위계 ────────────────────────────────────────────────────────
      ink-muted 까지가 본문에 써도 되는 대비(흰 배경 기준 WCAG AA 4.5:1 이상).
      ink-faint 는 큰 글씨·비활성 표시에만. */
@@ -237,11 +247,11 @@
     width: 100%;
     aspect-ratio: 856 / 540;
     font-size: calc(100cqw / 34.24);
-    /* 바탕: 남색 → 짙은 남색. 글자는 전부 흰색(컴포넌트에서 text-white) */
-    background: linear-gradient(135deg, var(--color-brand-800) 0%, var(--color-brand-900) 100%);
+    /* 바탕: 쪽빛 남색 → 먹색 남색. 글자는 전부 흰색(컴포넌트에서 text-white) */
+    background: linear-gradient(135deg, var(--color-card-navy-800) 0%, var(--color-card-navy-900) 100%);
   }
 
-  /* 장식 한 겹 — 엠블럼의 태극 곡선을 키운 워터마크. 그림 자체는 me/_portal/card-art.ts 의
+  /* 장식 한 겹 — 흐린 태극기(태극 + 건곤감리) 워터마크. 그림 자체는 me/_portal/card-art.ts 의
      SVG 한 장(PNG 렌더러와 공유)이고, 여기서는 정보 요소 아래 겹에 꽉 채우기만 한다 */
   [data-id-card-art] {
     overflow: hidden;
@@ -350,7 +360,7 @@
     color: #fff !important;
   }
 
-  /* 바탕·금색 선·흰 글씨·QR·사진 전부 원본 색으로. 브라우저의 "배경 그래픽" 설정과 무관하게 */
+  /* 바탕·홍청 띠·인장·금색·흰 글씨·QR·사진 전부 원본 색으로. 브라우저의 "배경 그래픽" 설정과 무관하게 */
   [data-id-card],
   [data-id-card] * {
     -webkit-print-color-adjust: exact;
